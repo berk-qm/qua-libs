@@ -1,18 +1,5 @@
-from configuration import config
-
 from qm.qua import *
-from qm.QuantumMachinesManager import QuantumMachinesManager, SimulationConfig, LoopbackInterface
 import numpy as np
-
-qmm = QuantumMachinesManager()
-
-v1_start = -0.2
-v1_end = 0
-v2_start = -0.15
-v2_end = 0.10
-step = 0.01
-n_avg = 100
-
 
 def scan2d(v1_start, v1_end, v2_start, v2_end, step, n_avg):
     n_v1 = int((v1_end - v1_start) / step)
@@ -43,7 +30,3 @@ def charge_stability_patch(v1_start, v1_end, v2_start, v2_end, step, n_avg, qm, 
     # calculate the derivative of the current for the charge stability diagram
     charge_stability = (np.gradient(current, step)[0] + np.gradient(current, step)[1]) / 2
     return charge_stability
-
-
-qm = QuantumMachinesManager().open_qm(config)
-a = charge_stability_patch(v1_start, v1_end, v2_start, v2_end, step, n_avg, qm)
