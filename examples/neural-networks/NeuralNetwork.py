@@ -13,8 +13,6 @@ class NeuralNetwork:
         """
         self.layers = layers
         self.depth = len(layers)
-        self.input_size = layers[0].input_size
-        self.output_size = layers[-1].output_size
 
     @property
     def layers(self):
@@ -26,6 +24,8 @@ class NeuralNetwork:
             if l[i].output_size != l[i + 1].input_size:
                 raise ValueError(f"The input/output sizes of layers {i} and {i + 1} must match")
         self._layers = l
+        self._input_size = self._layers[0].input_size
+        self._output_size = self._layers[-1].output_size
 
     def feed_forward(self, input_var, output_var=None, save_to=None):
         """
@@ -35,11 +35,13 @@ class NeuralNetwork:
         :param output_var: a Qua array to contain the output of the net
         :param save_to: a tag or stream to save the output to
         """
-        temp_input = declare(fixed, size=input_size)
         for i in range(self.depth - 1):
             layer = self.layers[i]
             temp_output = declare(fixed, size=layer.output_size)
             layer.feed_forward(input_var, temp_output)
+            input_var = temp_output
+        layer = self.layers[self.depth - 1]
+        layer.feed_forward(input_var, output_var, save_to)
 
 
 class DenseLayer:
@@ -63,9 +65,17 @@ class DenseLayer:
         self._input_size = self._weights.shape[1]
         self._output_size = self._weights.shape[0]
 
+    @property
+    def input_size(self):
+        return self._input_size
+
+    @property
+    def output_size(self):
+        return self._output_size
+
     def feed_forward(self, input_var, output_var=None, save_to=None):
         """
-        Propagate the input through the layer. Implements matrix multiplication
+        Propagate the input through the layer. Implements a matrix multiplication
 
         :param input_var: a Qua array containing the input to the layer
         :param output_var: a Qua array to contain the output of the layer
@@ -75,10 +85,10 @@ class DenseLayer:
         j = declare(int)
         k = declare(int)
         res = declare(fixed)
-        with for_(k, 0, k < self._output_size, k + 1):
+        with for_(k, 0, k < self.output_size, k + 1):
             assign(res, 0)
-            with for_(j, 0, j < self._input_size, j + 1):
-                assign(res, res + input_var[j] * w[k * self._input_size + j])
+            with for_(j, 0, j < self.input_size, j + 1):
+                assign(res, res + input_var[j] * w[k * self.input_size + j])
             if self.activation:
                 self.activation(res)
             if output_var:

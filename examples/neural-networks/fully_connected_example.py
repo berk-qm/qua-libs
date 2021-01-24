@@ -15,12 +15,16 @@ def relu(var):
         assign(var, zero)
 
 
-weights1 = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
-weights2 = np.array([[1, 2], [4, 5], [7, 8]])
+weights1 = 0.1 * np.array([[1, 2, 3], [4, 5, 6]])
+weights2 = 0.1 * np.array([[1, 2], [4, 5], [7, 8]])
+weights3 = 0.1 * np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
 
 params = (0.1 * np.arange(weights1.shape[1])).tolist()
 layer = DenseLayer(weights1, activation=relu)
 layer2 = DenseLayer(weights2)
+layer3 = DenseLayer(weights3)
+nn = NeuralNetwork([layer, layer2, layer3])
+
 with program() as prog:
     var = declare(fixed)
     input_ = declare(fixed, size=weights1.shape[1])
@@ -36,7 +40,10 @@ with program() as prog:
     layer.feed_forward(input_, output)
     layer2.feed_forward(output, save_to="result")
 
+    nn.feed_forward(input_, save_to="nn_result")
+
 job = QuantumMachinesManager().simulate(config, prog, SimulationConfig(30000, simulation_interface=LoopbackInterface(
     [('con1', 1, 'con1', 1)])))
 job.result_handles.wait_for_all_values()
 print(job.result_handles.result.fetch_all()['value'])
+print(job.result_handles.nn_result.fetch_all()['value'])
