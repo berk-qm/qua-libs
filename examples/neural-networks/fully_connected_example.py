@@ -1,5 +1,5 @@
 from configuration import config
-from NeuralNetwork import DenseLayer
+from NeuralNetwork import *
 from qm.QuantumMachinesManager import QuantumMachinesManager, SimulationConfig, LoopbackInterface
 from qm.qua import *
 import numpy as np

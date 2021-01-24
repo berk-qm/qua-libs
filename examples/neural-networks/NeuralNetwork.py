@@ -1,4 +1,5 @@
 from qm.qua import *
+import numpy as np
 
 
 class NeuralNetwork:
@@ -34,6 +35,7 @@ class NeuralNetwork:
         :param output_var: a Qua array to contain the output of the net
         :param save_to: a tag or stream to save the output to
         """
+        temp_input = declare(fixed, size=input_size)
         for i in range(self.depth - 1):
             layer = self.layers[i]
             temp_output = declare(fixed, size=layer.output_size)
@@ -48,8 +50,18 @@ class DenseLayer:
     def __init__(self, weights, activation=None):
         self.weights = weights
         self.activation = activation
-        self._input_size = self.weights.shape[1]
-        self._output_size = self.weights.shape[0]
+
+    @property
+    def weights(self):
+        return self._weights
+
+    @weights.setter
+    def weights(self, array):
+        if type(array) != np.ndarray:
+            raise TypeError("Weights must be given as a 2D Numpy array")
+        self._weights = array
+        self._input_size = self._weights.shape[1]
+        self._output_size = self._weights.shape[0]
 
     def feed_forward(self, input_var, output_var=None, save_to=None):
         """
