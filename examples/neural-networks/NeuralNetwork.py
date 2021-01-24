@@ -7,6 +7,9 @@ class NeuralNetwork:
     """
 
     def __init__(self, layers):
+        """
+        :param layers: a list of layers in the desired order
+        """
         self.layers = layers
         self.depth = len(layers)
         self.input_size = layers[0].input_size
@@ -25,13 +28,16 @@ class NeuralNetwork:
 
     def feed_forward(self, input_var, output_var=None, save_to=None):
         """
-        Propagate the input through the layer. Implements matrix multiplication
+        Propagate the input through the network. Implements matrix multiplication
 
-        :param input_var: a Qua array containing the input to the layer
-        :param output_var: a Qua array to contain the output of the layer
+        :param input_var: a Qua array containing the input to the net
+        :param output_var: a Qua array to contain the output of the net
         :param save_to: a tag or stream to save the output to
         """
-
+        for i in range(self.depth - 1):
+            layer = self.layers[i]
+            temp_output = declare(fixed, size=layer.output_size)
+            layer.feed_forward(input_var, temp_output)
 
 
 class DenseLayer:
@@ -39,22 +45,11 @@ class DenseLayer:
     Implementation of fully connected layer in Qua
     """
 
-    def __init__(self, input_size, output_size, weights, activation=None):
-        self.input_size = input_size
-        self.output_size = output_size
+    def __init__(self, weights, activation=None):
         self.weights = weights
         self.activation = activation
-
-    @property
-    def weights(self):
-        return self._weights
-
-    @weights.setter
-    def weights(self, array):
-        if array.shape[1] == self.input_size and array.shape[0] == self.output_size:
-            self._weights = array
-        else:
-            raise ValueError("Weights array size must match the input and output sizes of the layer")
+        self._input_size = self.weights.shape[1]
+        self._output_size = self.weights.shape[0]
 
     def feed_forward(self, input_var, output_var=None, save_to=None):
         """
@@ -68,10 +63,10 @@ class DenseLayer:
         j = declare(int)
         k = declare(int)
         res = declare(fixed)
-        with for_(k, 0, k < self.output_size, k + 1):
+        with for_(k, 0, k < self._output_size, k + 1):
             assign(res, 0)
-            with for_(j, 0, j < self.input_size, j + 1):
-                assign(res, res + input_var[j] * w[k * self.input_size + j])
+            with for_(j, 0, j < self._input_size, j + 1):
+                assign(res, res + input_var[j] * w[k * self._input_size + j])
             if self.activation:
                 self.activation(res)
             if output_var:

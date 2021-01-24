@@ -15,21 +15,21 @@ def relu(var):
         assign(var, zero)
 
 
-input_size = 5
-output_size = 7
-weights = np.random.rand(output_size, input_size)
-params = (0.1 * np.arange(input_size)).tolist()
-layer = DenseLayer(input_size, output_size, weights, activation=relu)
-layer2 = DenseLayer(output_size, input_size, np.random.rand(input_size, output_size))
+weights1 = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+weights2 = np.array([[1, 2], [4, 5], [7, 8]])
+
+params = (0.1 * np.arange(weights1.shape[1])).tolist()
+layer = DenseLayer(weights1, activation=relu)
+layer2 = DenseLayer(weights2)
 with program() as prog:
     var = declare(fixed)
-    input_ = declare(fixed, size=input_size)
-    output = declare(fixed, size=output_size)
+    input_ = declare(fixed, size=weights1.shape[1])
+    output = declare(fixed, size=weights1.shape[0])
     result = declare_stream()
 
     i = declare(int)
     a = declare(fixed)
-    with for_each_((i, a), (list(range(input_size)), params)):
+    with for_each_((i, a), (list(range(weights1.shape[1])), params)):
         measure_value(var, a)
         assign(input_[i], var)
 
