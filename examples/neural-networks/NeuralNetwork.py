@@ -49,8 +49,9 @@ class DenseLayer:
     Implementation of fully connected layer in Qua
     """
 
-    def __init__(self, weights, activation=None):
+    def __init__(self, weights, bias=None, activation=None):
         self.weights = weights
+        self.bias = bias
         self.activation = activation
 
     @property
@@ -64,6 +65,17 @@ class DenseLayer:
         self._weights = array
         self._input_size = self._weights.shape[1]
         self._output_size = self._weights.shape[0]
+
+    @property
+    def bias(self):
+        return self._bias
+
+    @bias.setter
+    def bias(self, b):
+        if b is not None:
+            if len(b) != self.output_size:
+                raise ValueError("The bias size must match the output size")
+        self._bias = b
 
     @property
     def input_size(self):
@@ -82,6 +94,8 @@ class DenseLayer:
         :param save_to: a tag or stream to save the output to
         """
         w = declare(fixed, value=self.weights.flatten().tolist())
+        if self.bias is not None:
+            b = declare(fixed, value=self.bias.tolist())
         j = declare(int)
         k = declare(int)
         res = declare(fixed)
@@ -89,6 +103,8 @@ class DenseLayer:
             assign(res, 0)
             with for_(j, 0, j < self.input_size, j + 1):
                 assign(res, res + input_var[j] * w[k * self.input_size + j])
+            if self.bias is not None:
+                assign(res, res + b[k])
             if self.activation:
                 self.activation(res)
             if output_var:

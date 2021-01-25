@@ -20,10 +20,10 @@ weights2 = 0.1 * np.array([[1, 2], [4, 5], [7, 8]])
 weights3 = 0.1 * np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
 
 params = (0.1 * np.arange(weights1.shape[1])).tolist()
-layer = DenseLayer(weights1, activation=relu)
+layer = DenseLayer(weights1, np.array([1, 2]), activation=relu)
 layer2 = DenseLayer(weights2)
 layer3 = DenseLayer(weights3)
-nn = NeuralNetwork([layer, layer2, layer3])
+nn = NeuralNetwork([layer, layer2])
 
 with program() as prog:
     var = declare(fixed)
