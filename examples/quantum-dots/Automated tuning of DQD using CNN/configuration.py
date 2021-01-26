@@ -1,4 +1,4 @@
-readout_len = 1000
+readout_len = 100
 config = {
     "version": 1,
     "controllers": {
