@@ -18,10 +18,7 @@ V_P2 = -dat['V_P2_vec']
 X, Y = np.meshgrid(V_P1, V_P2)
 N_v = 100
 
-current_vec = np.array([x['current'] for x in dat['output']]).reshape(N_v, N_v)
-charge_vec = np.array([np.sum(x['charge']) for x in dat['output']]).reshape(N_v, N_v)
 charge_vec_2 = np.array([np.array(x['charge']) for x in dat['output']]).reshape(N_v, N_v)
-
 state_vec = np.array([x['state'] for x in dat['output']]).reshape(N_v, N_v)
 sensor_vec = np.array([x['sensor'] for x in dat['output']]).reshape(N_v, N_v, -1)[:, :, 0]
 
@@ -30,17 +27,6 @@ matplotlib.rcParams.update({'font.size': 12})
 fig, axarr = plt.subplots(2, 2, figsize=(11, 10))
 fig.tight_layout(w_pad=7.0, h_pad=6.0)
 plt.yticks(np.arange(0.0, 0.5, 0.1))
-
-cd = axarr[0, 0].pcolor(X, Y, current_vec, vmax=1e-4, cmap=cm.summer)
-axarr[0, 0].set_title('Current data')
-axarr[0, 0].set_yticks(np.arange(0.0, 0.5, 0.1))
-fig.colorbar(cd, ax=axarr[0, 0], fraction=0.045)
-
-tcd = axarr[0, 1].pcolor(X, Y, charge_vec, cmap=plt.cm.get_cmap('summer', 13))
-axarr[0, 1].set_title('Total charge number')
-axarr[0, 1].set_yticks(np.arange(0.0, 0.5, 0.1))
-fig.colorbar(tcd, ax=axarr[0, 1], fraction=0.045, ticks=np.arange(0, 13, 1))
-tcd.set_clim(-0.5, 12.5)
 
 csd = axarr[1, 0].pcolor(X, Y, sensor_vec, cmap=cm.summer)
 axarr[1, 0].set_title('Charge sensor data')
@@ -59,21 +45,37 @@ plt.show()
 map_diff = {(0, 0): 0, (1, 0): 1, (0, 1): 2, (1, 1): 3}
 
 
-def get_random_patch(charge, patch_size):
-    x = np.random.randint(0, charge.shape[0] - patch_size)
-    y = np.random.randint(0, charge.shape[0] - patch_size)
-    patch = (x, y)
-    if charge[x, y] == charge[x + patch_size, y] == charge[x, y + patch_size] == charge[x + patch_size, y + patch_size]:
-        lines = 0
-        lr, ul, ur = 0, 0, 0
-    else:
-        lines = 1
-        try:
-            lr = map_diff[tuple(charge[x + patch_size, y] - charge[x, y])]
-            ul = map_diff[tuple(charge[x, y + patch_size] - charge[x, y])]
-            ur = map_diff[tuple(charge[x + patch_size, y + patch_size] - charge[x, y])]
-        except KeyError:
-            # in case there's a difference of more than 1 charge per quantum dot
-            return None
-    labels = (lines, (lr, ul, ur))
-    return patch, labels
+def get_random_patch(state, charge, patch_size):
+    i = 0
+    while i < 1000:
+        x = np.random.randint(0, charge.shape[0] - patch_size)
+        y = np.random.randint(0, charge.shape[0] - patch_size)
+        patch = (x, y)
+        if is_DD(state, x, y, patch_size):
+            if charge[x, y].all() == charge[x + patch_size, y].all() \
+                    == charge[x, y + patch_size].all() == charge[x + patch_size, y + patch_size].all():
+                lines = 0
+                lr, ul, ur = 0, 0, 0
+            else:
+                lines = 1
+                try:
+                    lr = map_diff[tuple(charge[x + patch_size, y] - charge[x, y])]
+                    ul = map_diff[tuple(charge[x, y + patch_size] - charge[x, y])]
+                    ur = map_diff[tuple(charge[x + patch_size, y + patch_size] - charge[x, y])]
+                    labels = (lines, (lr, ul, ur))
+                except KeyError:
+                    labels = (lines, None)
+                return patch, labels
+        else:
+            i += 1
+    print("Try a smaller patch size")
+    return None
+
+
+def is_DD(state, x, y, patch_size):
+    return (state[x, y] == 2) and (state[x + patch_size, y] == 2) and state[x, y + patch_size] == 2 and state[
+        x + patch_size, y + patch_size] == 2
+
+
+def get_patch(sensor, x, y, patch_size):
+    return sensor[x:x + patch_size, y:y + patch_size]

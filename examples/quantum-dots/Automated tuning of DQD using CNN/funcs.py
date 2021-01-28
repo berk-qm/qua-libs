@@ -43,7 +43,7 @@ def charge_stability_patch(v1_start, v1_end, v2_start, v2_end, step, n_avg, qm, 
 
 def set_gate_voltages(*v):
     """
-    Sets the voltage of external devices
+    Sets the voltage of different gates using external devices
     """
     pass
 
