@@ -13,3 +13,9 @@ examples/multi-qubit/multiplexed-multilevel-NN-discriminator/model.png
 examples/multi-qubit/multiplexed-multilevel-NN-discriminator/try7/
 examples/leakage-reduction/outcmaes/
 /examples/randomized-benchmark/leakage-reduction/outcmaes/
+
+examples/quantum-dots/Automated tuning of DQD using CNN/raw_data/
+
+examples/quantum-dots/Automated tuning of DQD using CNN/Data/
+
+*.png
