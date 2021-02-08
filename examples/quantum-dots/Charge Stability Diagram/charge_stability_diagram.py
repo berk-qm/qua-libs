@@ -1,7 +1,11 @@
 from configuration import config
 
 from qm.qua import *
-from qm.QuantumMachinesManager import QuantumMachinesManager, SimulationConfig, LoopbackInterface
+from qm.QuantumMachinesManager import (
+    QuantumMachinesManager,
+    SimulationConfig,
+    LoopbackInterface,
+)
 import numpy as np
 
 qmm = QuantumMachinesManager()
@@ -29,19 +33,27 @@ def scan2d(v1_start, v1_end, v2_start, v2_end, step, n_avg):
                     align("PG1", "PG2", "QPC")
                     play("playOp" * amp(v1), "PG1")
                     play("playOp" * amp(v2), "PG2")
-                    measure("readout", "QPC", None, integration.full("integW", I, "out1"))
+                    measure(
+                        "readout", "QPC", None, integration.full("integW", I, "out1")
+                    )
                     save(I, I_avg)
         with stream_processing():
             I_avg.buffer(n_v1, n_v2).average().save("current")
     return prog
 
 
-def charge_stability_patch(v1_start, v1_end, v2_start, v2_end, step, n_avg, qm, **execute_args):
-    job = qm.execute(scan2d(v1_start, v1_end, v2_start, v2_end, step, n_avg), **execute_args)
+def charge_stability_patch(
+    v1_start, v1_end, v2_start, v2_end, step, n_avg, qm, **execute_args
+):
+    job = qm.execute(
+        scan2d(v1_start, v1_end, v2_start, v2_end, step, n_avg), **execute_args
+    )
     job.result_handles.wait_for_all_values()
     current = job.result_handles.current.fetch_all()
     # calculate the derivative of the current for the charge stability diagram
-    charge_stability = (np.gradient(current, step)[0] + np.gradient(current, step)[1]) / 2
+    charge_stability = (
+        np.gradient(current, step)[0] + np.gradient(current, step)[1]
+    ) / 2
     return charge_stability
 
 

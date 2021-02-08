@@ -8,7 +8,6 @@ config = {
                 1: {"offset": +0.0},
                 2: {"offset": +0.0},
                 3: {"offset": +0.0},
-
             },
             "analog_inputs": {
                 1: {"offset": +0.0},
@@ -54,7 +53,7 @@ config = {
             "length": readout_len,  # in ns
             "waveforms": {"single": "zero_wf"},
             "digital_marker": "ON",
-            "integration_weights": {"integW": "integW"}
+            "integration_weights": {"integW": "integW"},
         },
     },
     "waveforms": {
@@ -65,9 +64,6 @@ config = {
         "ON": {"samples": [(1, 0)]},
     },
     "integration_weights": {
-        "integW": {
-            "cosine": [1] * (readout_len // 4),
-            "sine": [1] * (readout_len // 4)
-        }
-    }
+        "integW": {"cosine": [1] * (readout_len // 4), "sine": [1] * (readout_len // 4)}
+    },
 }
