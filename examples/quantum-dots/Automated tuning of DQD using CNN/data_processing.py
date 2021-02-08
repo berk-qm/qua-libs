@@ -30,6 +30,9 @@ map_diff = {(0, 0): 0, (1, 0): 1, (0, 1): 2, (1, 1): 3}
 
 
 def get_random_patch(state, charge2, patch_size):
+    """
+    Get a random patch of charge-stability diagram and label it using the QFlow dataset
+    """
     i = 0
     while i < 1000:
         x = np.random.randint(0, charge2.shape[0] - patch_size)
@@ -80,6 +83,9 @@ def get_patch(charge, x, y, patch_size):
 
 
 def get_data_and_labels(size, count):
+    """
+    Label the data from QFlow dataset
+    """
     images = []
     labels_lines = []
     labels_transitions = []
@@ -89,7 +95,8 @@ def get_data_and_labels(size, count):
         filename = os.fsdecode(file)
         if filename.endswith(".npy"):
             file_path = os.path.join(folder_path, filename)
-            print(str(i) + " -- " + os.path.join(folder_path, filename))
+            if i % 100 == 0:
+                print(str(i) + " -- " + os.path.join(folder_path, filename))
             charge2, state, charge = get_charge_state(file_path)
             for _ in range(count):
                 patch, label = get_random_patch(state, charge2, size)

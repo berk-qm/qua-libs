@@ -37,7 +37,7 @@ def charge_stability_patch(
     v1_start, v1_end, v2_start, v2_end, step, n_avg, qm, **execute_args
 ):
     """
-    Returns a charge stability diagram
+    Returns a charge stability diagram using 2d scan
     """
     job = qm.execute(
         scan2d(v1_start, v1_end, v2_start, v2_end, step, n_avg), **execute_args
@@ -62,6 +62,11 @@ def set_gate_voltages(*v):
 def generate_diagrams(gate_voltages, plunger_voltages, n_avg, qm, **execute_args):
     """
     Generates charge stability diagrams for different gate configurations and given plunger voltages
+    :param gate_voltages: a list of gate voltages configurations to scan
+    :param plunger_voltages: v1_start, v1_end, v2_start, v2_end, step - the start and end values of the plunger gates voltages
+    :param n_avg: the number of measurements to average upon
+    :param qm: a QuantumMachine object
+    :param execute_args: Qua execution arguments
     """
     diagrams = []
     v1_start, v1_end, v2_start, v2_end, step = plunger_voltages
@@ -77,17 +82,26 @@ def generate_diagrams(gate_voltages, plunger_voltages, n_avg, qm, **execute_args
 
 
 def labeled_patch(diagram, size):
+    """
+    A returns a random labeled patch of a charge-stability diagram
+    """
     x, y = np.random.randint(0, diagram.shape[0] - size), np.random.randint(
         0, diagram.shape[0] - size
     )
+
+    # for simulation purposes
     label_line = (1, 0)
     label_transition = np.array([[1, 0, 0, 0], [0, 0, 0, 1], [0, 1, 0, 0]])
+
     return diagram[x : x + size, y : y + size], label_line, label_transition
 
 
 def get_random_patches(diagrams, size, count):
     """
     Gets random patches from charge stability diagrams, and assigns labels to each
+    :param diagrams: the charge-stability diagrams to sample
+    :param size: the patch size to sample
+    :param count: the number of patches per charge-stability diagram
     """
 
     # when using real data and having a labeling function or person
@@ -113,7 +127,7 @@ cce_loss = tf.keras.losses.categorical_crossentropy
 def lines_model(input_size):
     """
     define a model for recognizing whether the dots are empty
-    the inputs are patches of voltages of size 20*20 with resolution 6-9 mV
+    the inputs are patches of voltages
     the output is a boolean(0/1)
     """
     lines = models.Sequential()
@@ -132,7 +146,7 @@ def lines_model(input_size):
 def transitions_model(input_size):
     """
     defines a model to recognize individual transition
-    the inputs are patches of voltages of size 28*28 with resolution 1mV
+    the inputs are patches of voltages
     the outputs are 3 layers with 4 value. Each layer corresponds to one of three corners(except the lowe left),
     each of the 4 values correspond to the kind of charge transition(change in charge) occurs when moving to that corner
     """
