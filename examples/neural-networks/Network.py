@@ -71,6 +71,8 @@ class Network:
 
     def backprop(self, label):
         self.loss.forward(self._res_, label)
+        save(self.loss._loss_, f"{self.name}_loss_stream")
+
         error = self.loss._gradient_
         for i in range(self.depth - 1, -1, -1):
             layer = self.layers[i]

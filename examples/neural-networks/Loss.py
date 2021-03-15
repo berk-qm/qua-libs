@@ -26,7 +26,7 @@ class MeanSquared(Loss):
         self._diff_ = declare(fixed)
 
     def forward(self, pred, label):
-        assign(self._loss_, 0)
+        assign(self._loss_, 0.0)
         with for_(self._k_, 0, self._k_ < pred.length(), self._k_ + 1):
             assign(self._diff_, pred[self._k_] - label[self._k_])
             assign(self._loss_, self._loss_ + 0.5 * self._diff_ * self._diff_)
