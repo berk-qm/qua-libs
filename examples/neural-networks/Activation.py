@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 class Activation(ABC):
 
     def __init__(self):
-        pass
+        self._res_ = declare(fixed)
 
     @abstractmethod
     def forward(self, var):
@@ -14,6 +14,18 @@ class Activation(ABC):
     @abstractmethod
     def backward(self, var):
         pass
+
+
+class Id(Activation):
+    def __init__(self):
+        super(Id, self).__init__()
+        self._one_ = declare(fixed, value=1)
+
+    def forward(self, var):
+        assign(self._res_, var)
+
+    def backward(self, var):
+        assign(self._res_, self._one_)
 
 
 class ReLu(Activation):
@@ -24,10 +36,13 @@ class ReLu(Activation):
 
     def forward(self, var):
         with if_(var < 0):
-            assign(var, self._zero_)
+            assign(self._res_, self._zero_)
+        with else_():
+            assign(self._res_, var)
 
     def backward(self, var):
         with if_(var < 0):
-            assign(var, self._zero_)
+            assign(self._res_, self._zero_)
         with else_():
-            assign(var, self._one_)
+            assign(self._res_, self._one_)
+

@@ -13,7 +13,10 @@ class Layer(ABC):
         self.bias = bias
         self._res_ = declare(fixed, size=self.output_size)
         self._z_ = declare(fixed, size=self.output_size)
-        self._gradient_ = declare(fixed, size=self.output_size)
+        self._error_ = declare(fixed, size=self.input_size)
+        self._index_ = declare(int)
+        self._weights_stream_ = declare_stream()
+        self._bias_stream_ = declare_stream()
 
     @property
     def input_size(self):
@@ -22,6 +25,17 @@ class Layer(ABC):
     @property
     def output_size(self):
         return self._output_size
+
+    @property
+    def activation(self):
+        return self._activation
+
+    @activation.setter
+    def activation(self, act):
+        if act:
+            self._activation = act
+        else:
+            self._activation = Id()
 
     @property
     def weights(self):
@@ -36,6 +50,7 @@ class Layer(ABC):
         self._output_size = self._weights.shape[0]
         # qua
         self._weights_ = declare(fixed, value=self.weights.flatten().tolist())
+        self._gradient_ = declare(fixed, value=self.weights.flatten().tolist())
 
     @property
     def bias(self):
@@ -49,6 +64,8 @@ class Layer(ABC):
 
             # qua
             self._bias_ = declare(fixed, value=b.tolist())
+        else:
+            self._bias_ = declare(fixed, value=[0] * self._output_size)
 
         self._bias = b
 
@@ -57,8 +74,18 @@ class Layer(ABC):
         pass
 
     @abstractmethod
-    def backward(self, input_var, output_var=None):
+    def backward(self, error, input_, learning_rate):
         pass
+
+    def save_weights_(self, tag):
+        with for_(self._index_, 0, self._index_ < self._weights_.length(), self._index_ + 1):
+            save(self._weights_[self._index_], self._weights_stream_)
+        with for_(self._index_, 0, self._index_ < self._bias_.length(), self._index_ + 1):
+            save(self._bias_[self._index_], self._bias_stream_)
+
+        with stream_processing():
+            self._weights_stream_.buffer(self.output_size, self.input_size).save_all(tag + "weights")
+            self._bias_stream_.buffer(self.output_size).save_all(tag + "bias")
 
 
 class Dense(Layer):
@@ -85,15 +112,13 @@ class Dense(Layer):
 
             with for_(self._j_, 0, self._j_ < self.input_size, self._j_ + 1):
                 assign(self._z_[self._k_],
-                       self._z_[self._k_] + input_var[self._j_] * self._weights_[self._k_ * self.input_size + self._j_])
+                       self._z_[self._k_]
+                       + input_var[self._j_] * self._weights_[self._k_ * self.input_size + self._j_])
 
-            if self.bias is not None:
-                assign(self._z_[self._k_], self._z_[self._k_] + self._bias_[self._k_])
+            assign(self._z_[self._k_], self._z_[self._k_] + self._bias_[self._k_])
 
-            assign(self._res_[self._k_], self._z_[self._k_])
-
-            if self.activation:
-                self.activation.forward(self._res_[self._k_])
+            self.activation.forward(self._z_[self._k_])
+            assign(self._res_[self._k_], self.activation._res_)
 
             if output_var:
                 assign(output_var[self._k_], self._res_[self._k_])
@@ -101,5 +126,30 @@ class Dense(Layer):
             if stream_or_tag:
                 save(self._res_[self._k_], stream_or_tag)
 
-    def backward(self):
-        pass
+    def backward(self, error, input_, learning_rate):
+        with for_(self._j_, 0, self._j_ < self.input_size, self._j_ + 1):
+            assign(self._error_[self._j_], 0)
+            with for_(self._k_, 0, self._k_ < self.output_size, self._k_ + 1):
+                # calculate activation derivative
+                self.activation.backward(self._z_[self._k_])
+
+                # calculate the gradient using the error from next layer, activation and input
+                assign(self._gradient_[self._k_ * self.input_size + self._j_],
+                       error[self._k_] * self.activation._res_ * input_[self._j_]
+                       )
+
+                # update weights using the gradient
+                assign(self._weights_[self._k_ * self.input_size + self._j_],
+                       self._weights_[self._k_ * self.input_size + self._j_]
+                       - learning_rate * self._gradient_[self._k_ * self.input_size + self._j_]
+                       )
+
+                # update bias
+                assign(self._bias_[self._k_],
+                       self._bias_[self._k_] - learning_rate * error[self._k_] * self.activation._res_
+                       )
+
+                # update error to pass backwards
+                assign(self._error_[self._j_],
+                       self._error_[self._j_] + self._gradient_[self._k_ * self.input_size + self._j_]
+                       )
