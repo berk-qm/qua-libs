@@ -4,17 +4,16 @@ from abc import ABC, abstractmethod
 
 class Activation(ABC):
 
-    def __init__(self, func=None, gradient=None):
-        self.func = func
-        self.gradient = gradient
+    def __init__(self):
+        pass
 
     @abstractmethod
     def forward(self, var):
-        self.func(var)
+        pass
 
     @abstractmethod
     def backward(self, var):
-        self.gradient(var)
+        pass
 
 
 class ReLu(Activation):

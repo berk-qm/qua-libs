@@ -33,6 +33,15 @@ class Network:
         self._input_size = self._layers[0].input_size
         self._output_size = self._layers[-1].output_size
 
+    @property
+    def loss(self):
+        return self._loss
+
+    @loss.setter
+    def loss(self, loss):
+        if loss:
+            self._loss = loss.__class__(output_size=self._output_size)
+
     def forward(self, input_var, output_var=None, stream_or_tag=None):
         """
         Propagate the input through the network. Implements matrix multiplication
@@ -51,5 +60,7 @@ class Network:
             with for_(self._index_, 0, self._index_ < self._output_size, self._index_ + 1):
                 assign(output_var[self._index_], self._res_[self._index_])
 
-    def backprop(self):
-        pass
+    def backprop(self, label):
+        self.loss.forward(self._res_, label)
+        for i in range(self.depth - 1, -1, -1):
+            pass

@@ -19,7 +19,7 @@ with program() as prog:
     layer = Dense(weights=weights1, bias=np.array([1, 2]), activation=ReLu())
     layer2 = Dense(weights=weights2)
     layer3 = Dense(weights=weights3)
-    nn = Network(layer, layer2)
+    nn = Network(layer, layer2, loss=MeanSquared())
 
     var = declare(fixed)
     input_ = declare(fixed, size=weights1.shape[1])

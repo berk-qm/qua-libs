@@ -15,7 +15,6 @@ class Layer(ABC):
         self._z_ = declare(fixed, size=self.output_size)
         self._gradient_ = declare(fixed, size=self.output_size)
 
-
     @property
     def input_size(self):
         return self._input_size
