@@ -1,3 +1,9 @@
+"""
+fully_connected_example.py: Fully connected NN with backpropagation in QUA
+Author: Ilan Mitnikov - Quantum Machines
+Created: 14/03/2021
+Created on QUA version: 0.8
+"""
 from configuration import config
 from Network import *
 from qm.QuantumMachinesManager import QuantumMachinesManager, SimulationConfig, LoopbackInterface
@@ -16,16 +22,15 @@ weights3 = 0.1 * np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
 params = (0.1 * np.arange(weights1.shape[1])).tolist()
 
 with program() as prog:
-    # layer = Dense(weights=weights1, activation=ReLu())
-    layer = Dense(3, 2, activation=ReLu())
+    layer1 = Dense(3, 2, activation=ReLu())
     layer2 = Dense(weights=weights2, activation=ReLu())
-    layer3 = Dense(3, 3)
-    nn = Network(layer, layer2, layer3, loss=MeanSquared(), learning_rate=0.05, name='mynet')
+    layer3 = Dense(3, 3, initializer=Normal())
+    nn = Network(layer1, layer2, layer3, loss=MeanSquared(), learning_rate=0.05, name='mynet')
 
     var = declare(fixed)
     label = declare(fixed, value=[0.1, -0.2, 0.3])
-    input_ = declare(fixed, size=weights1.shape[1])
-    # output = declare(fixed, size=weights1.shape[0])
+    input_ = declare(fixed, size=layer1.input_size)
+    # output = declare(fixed, size=layer1.output_size)
     # result = declare_stream()
 
     i = declare(int)
@@ -36,7 +41,7 @@ with program() as prog:
             measure_value(var, a)
             assign(input_[i], var)
 
-        # layer.forward(input_, output)
+        # layer1.forward(input_, output)
         # layer2.forward(output, stream_or_tag="result")
 
         # nn.forward(input_)
