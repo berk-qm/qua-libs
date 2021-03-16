@@ -74,7 +74,7 @@ class Network:
         self.loss.forward(self._res_, label)
         save(self.loss._loss_, f"{self.name}_loss_stream")
 
-        error = self.loss._gradient_
+        error = self.loss._error_
         for i in range(self.depth - 1, -1, -1):
             layer = self.layers[i]
             if i > 0:
