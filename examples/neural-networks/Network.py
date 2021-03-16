@@ -2,6 +2,7 @@ from qm.qua import *
 from Layer import *
 from Activation import *
 from Loss import *
+from Initializer import *
 
 
 class Network:

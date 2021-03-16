@@ -1,14 +1,17 @@
 from qm.qua import *
 import numpy as np
 from Activation import *
+from Initializer import *
 from abc import ABC, abstractmethod
 
 
 class Layer(ABC):
-    def __init__(self, input_size=None, output_size=None, activation=None, weights=None, bias=None):
+    def __init__(self, input_size=None, output_size=None, activation=None, initializer=Uniform(), weights=None,
+                 bias=None):
         self._input_size = input_size
         self._output_size = output_size
         self.activation: Activation = activation
+        self.initializer: Initializer = initializer
         self.weights = weights
         self.bias = bias
         self._res_ = declare(fixed, size=self.output_size)
@@ -38,13 +41,24 @@ class Layer(ABC):
             self._activation = Id()
 
     @property
+    def initializer(self):
+        return self._initializer
+
+    @initializer.setter
+    def initializer(self, init):
+        self._initializer = init.__class__(shape=(self.output_size, self.input_size))
+
+    @property
     def weights(self):
         return self._weights
 
     @weights.setter
     def weights(self, array):
-        if type(array) != np.ndarray:
-            raise TypeError("Weights must be given as a 2D Numpy array")
+        if array is None:
+            array = self.initializer.get_weights()
+        else:
+            if type(array) != np.ndarray:
+                raise TypeError("Weights must be given as a 2D Numpy array")
         self._weights = array
         self._input_size = self._weights.shape[1]
         self._output_size = self._weights.shape[0]
@@ -65,7 +79,7 @@ class Layer(ABC):
             # qua
             self._bias_ = declare(fixed, value=b.tolist())
         else:
-            self._bias_ = declare(fixed, value=[0] * self._output_size)
+            self._bias_ = declare(fixed, value=self.initializer.get_weights((self._output_size,)))
 
         self._bias = b
 
@@ -93,8 +107,8 @@ class Dense(Layer):
     Implementation of fully connected layer in Qua
     """
 
-    def __init__(self, input_size=None, output_size=None, activation=None, weights=None, bias=None):
-        super().__init__(input_size, output_size, activation, weights, bias)
+    def __init__(self, input_size=None, output_size=None, activation=None, initializer=Uniform(), weights=None, bias=None):
+        super().__init__(input_size, output_size, activation, initializer, weights, bias)
         self._j_ = declare(int)
         self._k_ = declare(int)
 

@@ -16,10 +16,11 @@ weights3 = 0.1 * np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
 params = (0.1 * np.arange(weights1.shape[1])).tolist()
 
 with program() as prog:
-    layer = Dense(weights=weights1, bias=np.array([1, 2]), activation=ReLu())
-    layer2 = Dense(weights=weights2)
-    layer3 = Dense(weights=weights3)
-    nn = Network(layer, layer2, layer3, loss=MeanSquared(), learning_rate=0.01, name='mynet')
+    # layer = Dense(weights=weights1, activation=ReLu())
+    layer = Dense(3, 2, activation=ReLu())
+    layer2 = Dense(weights=weights2, activation=ReLu())
+    layer3 = Dense(3, 3)
+    nn = Network(layer, layer2, layer3, loss=MeanSquared(), learning_rate=0.05, name='mynet')
 
     var = declare(fixed)
     label = declare(fixed, value=[0.1, -0.2, 0.3])
