@@ -39,8 +39,10 @@ with program() as prog:
         # layer.forward(input_, output)
         # layer2.forward(output, stream_or_tag="result")
 
-        nn.forward(input_)
-        nn.backprop(label)
+        # nn.forward(input_)
+        # nn.backprop(label)
+
+        nn.training_step(input_, label)
 
     nn.save_weights()
     nn.save_results()

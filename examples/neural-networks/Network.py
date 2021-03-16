@@ -52,7 +52,6 @@ class Network:
 
         :param input_var: a Qua array containing the input to the net
         :param output_var: a Qua array to contain the output of the net
-        :param stream_or_tag: a tag or stream to save the output to
         """
         self._input = input_var
         for i in range(self.depth - 1):
@@ -83,6 +82,10 @@ class Network:
                 input_ = self._input
             layer.backward(error, input_, self.learning_rate)
             error = layer._error_
+
+    def training_step(self, input_, label):
+        self.forward(input_)
+        self.backprop(label)
 
     def save_weights(self):
         for i in range(self.depth):
