@@ -1,6 +1,6 @@
 import numpy as np
 
-pulse_len = 300
+pulse_len = 16
 
 config = {
     "version": 1,

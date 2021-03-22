@@ -10,7 +10,7 @@ class Network:
     Implements a neural network in qua
     """
 
-    def __init__(self, *layers, loss=None, learning_rate=0.01, name='nn'):
+    def __init__(self, *layers, loss=None, learning_rate=0.01, name="nn"):
         """
         :param layers: a list of layers in the desired order
         """
@@ -32,7 +32,9 @@ class Network:
     def layers(self, l):
         for i in range(len(l) - 1):
             if l[i].output_size != l[i + 1].input_size:
-                raise ValueError(f"The input/output sizes of layers {i} and {i + 1} must match")
+                raise ValueError(
+                    f"The input/output sizes of layers {i} and {i + 1} must match"
+                )
         self._layers = l
         self._input_size = self._layers[0].input_size
         self._output_size = self._layers[-1].output_size
@@ -62,11 +64,15 @@ class Network:
         layer.forward(input_var, self._res_)
 
         if output_var:
-            with for_(self._index_, 0, self._index_ < self._output_size, self._index_ + 1):
+            with for_(
+                self._index_, 0, self._index_ < self._output_size, self._index_ + 1
+            ):
                 assign(output_var[self._index_], self._res_[self._index_])
                 save(self._res_[self._index_], self._results_stream_)
         else:
-            with for_(self._index_, 0, self._index_ < self._output_size, self._index_ + 1):
+            with for_(
+                self._index_, 0, self._index_ < self._output_size, self._index_ + 1
+            ):
                 save(self._res_[self._index_], self._results_stream_)
 
     def backprop(self, label):
@@ -92,6 +98,6 @@ class Network:
             layer = self.layers[i]
             layer.save_weights_(f"{self.name}_layer{i}_")
 
-    def save_results(self, tag='_results_stream'):
+    def save_results(self, tag="_results_stream"):
         with stream_processing():
             self._results_stream_.buffer(self._output_size).save_all(self.name + tag)

@@ -6,7 +6,11 @@ Created on QUA version: 0.8
 """
 from configuration import config
 from Network import *
-from qm.QuantumMachinesManager import QuantumMachinesManager, SimulationConfig, LoopbackInterface
+from qm.QuantumMachinesManager import (
+    QuantumMachinesManager,
+    SimulationConfig,
+    LoopbackInterface,
+)
 from qm.qua import *
 import numpy as np
 
@@ -25,7 +29,9 @@ with program() as prog:
     layer1 = Dense(3, 2, activation=ReLu())
     layer2 = Dense(weights=weights2, activation=ReLu())
     layer3 = Dense(3, 3, initializer=Normal())
-    nn = Network(layer1, layer2, layer3, loss=MeanSquared(), learning_rate=0.05, name='mynet')
+    nn = Network(
+        layer1, layer2, layer3, loss=MeanSquared(), learning_rate=0.05, name="mynet"
+    )
 
     var = declare(fixed)
     label = declare(fixed, value=[0.1, -0.2, 0.3])
@@ -52,8 +58,13 @@ with program() as prog:
     nn.save_weights()
     nn.save_results()
 
-job = QuantumMachinesManager().simulate(config, prog, SimulationConfig(100000, simulation_interface=LoopbackInterface(
-    [('con1', 1, 'con1', 1)])))
+job = QuantumMachinesManager().simulate(
+    config,
+    prog,
+    SimulationConfig(
+        100000, simulation_interface=LoopbackInterface([("con1", 1, "con1", 1)])
+    ),
+)
 job.result_handles.wait_for_all_values()
 # print(job.result_handles.result.fetch_all()['value'])
-print(job.result_handles.mynet_results_stream.fetch_all()['value'])
+print(job.result_handles.mynet_results_stream.fetch_all()["value"])

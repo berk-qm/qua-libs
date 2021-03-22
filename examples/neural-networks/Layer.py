@@ -6,8 +6,15 @@ from abc import ABC, abstractmethod
 
 
 class Layer(ABC):
-    def __init__(self, input_size=None, output_size=None, activation=None, initializer=Uniform(), weights=None,
-                 bias=None):
+    def __init__(
+        self,
+        input_size=None,
+        output_size=None,
+        activation=None,
+        initializer=Uniform(),
+        weights=None,
+        bias=None,
+    ):
         self._input_size = input_size
         self._output_size = output_size
         self.activation: Activation = activation
@@ -79,7 +86,10 @@ class Layer(ABC):
             # qua
             self._bias_ = declare(fixed, value=b.tolist())
         else:
-            self._bias_ = declare(fixed, value=self.initializer.get_weights((self._output_size,)))
+            b = self.initializer.get_weights((self._output_size,))
+            self._bias_ = declare(
+                fixed, value=b
+            )
 
         self._bias = b
 
@@ -92,13 +102,19 @@ class Layer(ABC):
         pass
 
     def save_weights_(self, tag):
-        with for_(self._index_, 0, self._index_ < self._weights_.length(), self._index_ + 1):
+        with for_(
+            self._index_, 0, self._index_ < self._weights_.length(), self._index_ + 1
+        ):
             save(self._weights_[self._index_], self._weights_stream_)
-        with for_(self._index_, 0, self._index_ < self._bias_.length(), self._index_ + 1):
+        with for_(
+            self._index_, 0, self._index_ < self._bias_.length(), self._index_ + 1
+        ):
             save(self._bias_[self._index_], self._bias_stream_)
 
         with stream_processing():
-            self._weights_stream_.buffer(self.output_size, self.input_size).save_all(tag + "weights")
+            self._weights_stream_.buffer(self.output_size, self.input_size).save_all(
+                tag + "weights"
+            )
             self._bias_stream_.buffer(self.output_size).save_all(tag + "bias")
 
 
@@ -107,8 +123,18 @@ class Dense(Layer):
     Implementation of fully connected layer in Qua
     """
 
-    def __init__(self, input_size=None, output_size=None, activation=None, initializer=Uniform(), weights=None, bias=None):
-        super().__init__(input_size, output_size, activation, initializer, weights, bias)
+    def __init__(
+        self,
+        input_size=None,
+        output_size=None,
+        activation=None,
+        initializer=Uniform(),
+        weights=None,
+        bias=None,
+    ):
+        super().__init__(
+            input_size, output_size, activation, initializer, weights, bias
+        )
         self._j_ = declare(int)
         self._k_ = declare(int)
 
@@ -125,9 +151,12 @@ class Dense(Layer):
             assign(self._z_[self._k_], 0)
 
             with for_(self._j_, 0, self._j_ < self.input_size, self._j_ + 1):
-                assign(self._z_[self._k_],
-                       self._z_[self._k_]
-                       + input_var[self._j_] * self._weights_[self._k_ * self.input_size + self._j_])
+                assign(
+                    self._z_[self._k_],
+                    self._z_[self._k_]
+                    + input_var[self._j_]
+                    * self._weights_[self._k_ * self.input_size + self._j_],
+                )
 
             assign(self._z_[self._k_], self._z_[self._k_] + self._bias_[self._k_])
 
@@ -148,22 +177,44 @@ class Dense(Layer):
                 self.activation.backward(self._z_[self._k_])
 
                 # calculate the gradient using the error from next layer, activation and input
-                assign(self._gradient_[self._k_ * self.input_size + self._j_],
-                       error[self._k_] * self.activation._res_ * input_[self._j_]
-                       )
+                assign(
+                    self._gradient_[self._k_ * self.input_size + self._j_],
+                    error[self._k_] * self.activation._res_ * input_[self._j_],
+                )
 
                 # update weights using the gradient
-                assign(self._weights_[self._k_ * self.input_size + self._j_],
-                       self._weights_[self._k_ * self.input_size + self._j_]
-                       - learning_rate * self._gradient_[self._k_ * self.input_size + self._j_]
-                       )
+                assign(
+                    self._weights_[self._k_ * self.input_size + self._j_],
+                    self._weights_[self._k_ * self.input_size + self._j_]
+                    - learning_rate
+                    * self._gradient_[self._k_ * self.input_size + self._j_],
+                )
 
                 # update bias
-                assign(self._bias_[self._k_],
-                       self._bias_[self._k_] - learning_rate * error[self._k_] * self.activation._res_
-                       )
+                assign(
+                    self._bias_[self._k_],
+                    self._bias_[self._k_]
+                    - learning_rate * error[self._k_] * self.activation._res_,
+                )
 
                 # update error to pass backwards
-                assign(self._error_[self._j_],
-                       self._error_[self._j_] + self._gradient_[self._k_ * self.input_size + self._j_]
-                       )
+                assign(
+                    self._error_[self._j_],
+                    self._error_[self._j_]
+                    + self._gradient_[self._k_ * self.input_size + self._j_],
+                )
+
+
+class Conv(Layer):
+    def __init__(
+        self,
+        input_size=None,
+        kernel_size=None,
+        strides=None,
+        padding=None,
+        activation=None,
+        initializer=Uniform(),
+        weights=None,
+        bias=None,
+    ):
+        super(Conv, self).__init__()

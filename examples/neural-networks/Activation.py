@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 
 
 class Activation(ABC):
-
     def __init__(self):
         self._res_ = declare(fixed)
 
@@ -45,4 +44,3 @@ class ReLu(Activation):
             assign(self._res_, self._zero_)
         with else_():
             assign(self._res_, self._one_)
-

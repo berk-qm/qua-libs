@@ -18,18 +18,16 @@ class Uniform(Initializer):
         self.high = high
 
     def get_weights(self, shape=None):
-        if shape is None:
-            shape = self.shape
+        shape = shape if shape else self.shape
         return np.random.uniform(self.low, self.high, size=shape)
 
 
 class Normal(Initializer):
-    def __init__(self, shape=None, mean=0, scale=1):
+    def __init__(self, shape=None, mean=0, scale=0.5):
         super().__init__(shape)
         self.mean = mean
         self.scale = scale
 
     def get_weights(self, shape=None):
-        if shape is None:
-            shape = self.shape
+        shape = shape if shape else self.shape
         return np.random.normal(self.mean, self.scale, size=shape)
