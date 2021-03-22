@@ -13,6 +13,7 @@ from qm.QuantumMachinesManager import (
 )
 from qm.qua import *
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def measure_value(var, a):
@@ -22,19 +23,19 @@ def measure_value(var, a):
 weights1 = 0.1 * np.array([[1, 2, 3], [4, 5, 6]])
 weights2 = 0.1 * np.array([[1, 2], [4, 5], [7, 8]])
 weights3 = 0.1 * np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
-
+label = [0.1, -0.2, 0.3]
 params = (0.1 * np.arange(weights1.shape[1])).tolist()
 
 with program() as prog:
     layer1 = Dense(3, 2, activation=ReLu())
-    layer2 = Dense(weights=weights2, activation=ReLu())
+    layer2 = Dense(2, 3, activation=ReLu(), weights=weights2)
     layer3 = Dense(3, 3, initializer=Normal())
     nn = Network(
         layer1, layer2, layer3, loss=MeanSquared(), learning_rate=0.05, name="mynet"
     )
 
     var = declare(fixed)
-    label = declare(fixed, value=[0.1, -0.2, 0.3])
+    label_ = declare(fixed, value=label)
     input_ = declare(fixed, size=layer1.input_size)
     # output = declare(fixed, size=layer1.output_size)
     # result = declare_stream()
@@ -53,7 +54,7 @@ with program() as prog:
         # nn.forward(input_)
         # nn.backprop(label)
 
-        nn.training_step(input_, label)
+        nn.training_step(input_, label_)
 
     nn.save_weights()
     nn.save_results()
@@ -67,4 +68,11 @@ job = QuantumMachinesManager().simulate(
 )
 job.result_handles.wait_for_all_values()
 # print(job.result_handles.result.fetch_all()['value'])
-print(job.result_handles.mynet_results_stream.fetch_all()["value"])
+results = job.result_handles.mynet_results_stream.fetch_all()["value"]
+# print(job.result_handles.mynet_results_stream.fetch_all()["value"])
+plt.plot(results)
+plt.hlines(label, xmin=0, xmax=results.shape[0], color='r', linestyles='--')
+plt.ylabel('Label')
+plt.figure()
+plt.plot(job.result_handles.mynet_loss_stream.fetch_all()['value'])
+plt.ylabel("Loss")
