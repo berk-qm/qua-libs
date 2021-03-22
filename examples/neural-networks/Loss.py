@@ -36,3 +36,4 @@ class MeanSquared(Loss):
 
     def backward(self, pred, label):
         pass
+

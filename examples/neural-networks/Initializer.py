@@ -13,7 +13,7 @@ class Initializer(ABC):
 
 class Uniform(Initializer):
     def __init__(self, shape=None, low=-0.5, high=0.5):
-        super(Uniform, self).__init__(shape)
+        super().__init__(shape)
         self.low = low
         self.high = high
 
