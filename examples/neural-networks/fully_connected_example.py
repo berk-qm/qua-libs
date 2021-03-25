@@ -40,6 +40,16 @@ with program() as prog:
     # output = declare(fixed, size=layer1.output_size)
     # result = declare_stream()
 
+    conv = Conv(
+        (3, 4),
+        (2, 2),
+        kernel_weights=np.array([[1, 1], [2, 2]]),
+    )
+    input2_ = declare(
+        fixed, value=(np.array([1, 1, 2, 3, 2, 2, 3, 4, 3, 3, 4, 5]) * 0.1).tolist()
+    )
+    conv.forward(input2_, save_to="conv_res")
+    conv.save_weights_("conv_")
     i = declare(int)
     with for_(i, 0, i < 50, i + 1):
         i = declare(int)
@@ -71,8 +81,8 @@ job.result_handles.wait_for_all_values()
 results = job.result_handles.mynet_results_stream.fetch_all()["value"]
 # print(job.result_handles.mynet_results_stream.fetch_all()["value"])
 plt.plot(results)
-plt.hlines(label, xmin=0, xmax=results.shape[0], color='r', linestyles='--')
-plt.ylabel('Label')
+plt.hlines(label, xmin=0, xmax=results.shape[0], color="r", linestyles="--")
+plt.ylabel("Label")
 plt.figure()
-plt.plot(job.result_handles.mynet_loss_stream.fetch_all()['value'])
+plt.plot(job.result_handles.mynet_loss_stream.fetch_all()["value"])
 plt.ylabel("Loss")
