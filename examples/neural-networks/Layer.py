@@ -300,10 +300,13 @@ class Conv(Layer):
     def initializer(self, init):
         self._initializer = init.__class__(shape=self.kernel_shape)
 
-    def _apply_padding(self):
-        pass
+    def _apply_padding(self, input_var):
+        padded_input = None
+        return padded_input
 
     def forward(self, input_var, output_var=None, save_to=None):
+        padded_input = self._apply_padding(input_var)
+
         if self.padding == "valid":
             with for_(self._k_, 0, self._k_ < self.output_shape[0], self._k_ + 1):
                 with for_(self._j_, 0, self._j_ < self.output_shape[1], self._j_ + 1):
