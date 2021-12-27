@@ -6,21 +6,17 @@ from qm.qua import *
 π = np.pi
 
 
-def gauss(amplitude, mu, sigma, delf, length):
+def gauss(amplitude, mu, sigma, length):
     t = np.linspace(-length / 2, length / 2, length)
     gauss_wave = amplitude * np.exp(-((t - mu) ** 2) / (2 * sigma ** 2))
-    # Detuning correction Eqn. (4) in Chen et al. PRL, 116, 020501 (2016)
-    gauss_wave = gauss_wave * np.exp(2 * np.pi * delf * t)
     return [float(x) for x in gauss_wave]
 
 
-def gauss_der(amplitude, mu, sigma, delf, length):
+def gauss_der(amplitude, mu, sigma, length):
     t = np.linspace(-length / 2, length / 2, length)
     gauss_der_wave = (
-        amplitude * (-2 * (t - mu)) * np.exp(-((t - mu) ** 2) / (2 * sigma ** 2))
-    )
-    # Detuning correction Eqn. (4) in Chen et al. PRL, 116, 020501 (2016)
-    gauss_der_wave = gauss_der_wave * np.exp(2 * np.pi * delf * t)
+        - (t - mu))/sigma**2 * np.array(gauss(amplitude, mu, sigma, length))
+
     return [float(x) for x in gauss_der_wave]
 
 
@@ -30,13 +26,12 @@ x90amp = 0.4
 x90std = 0.2
 x90mean = 0
 x90duration = 80
-x90detuning = 0
 x90waveform = gauss(
-    x90amp, x90mean, x90std, x90detuning, x90duration
+    x90amp, x90mean, x90std, x90duration
 )  # Assume you have calibration for a X90 pulse
 lmda = 0.5  # Define scaling parameter for Drag Scheme
 alpha = -1  # Define anharmonicity parameter
-x90der_waveform = gauss_der(x90amp, x90mean, x90std, x90detuning, x90duration)
+x90der_waveform = gauss_der(x90amp, x90mean, x90std, x90duration)
 
 CR_const_duration = 160
 CR_edges_duration = 16
@@ -272,11 +267,11 @@ IBMconfig = {
         "x90_wf": {"type": "arbitrary", "samples": x90waveform},
         "CR_rising_edge_wf": {
             "type": "arbitrary",
-            "samples": [0.0] + gauss(CR_amp, 0, 7.1, 0, 28)[0:14] + [0.0],
+            "samples": [0.0] + gauss(CR_amp, 0, 7.1, 28)[0:14] + [0.0],
         },
         "CR_falling_edge_wf": {
             "type": "arbitrary",
-            "samples": [0.0] + gauss(CR_amp, 0, 7.1, 0, 28)[14:] + [0],
+            "samples": [0.0] + gauss(CR_amp, 0, 7.1, 28)[14:] + [0],
         },
         "CR_const_wf": {"type": "constant", "sample": CR_amp},
         "x90_der_wf": {"type": "arbitrary", "samples": x90der_waveform},
