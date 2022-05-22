@@ -78,22 +78,21 @@ def qua_compose_alpha(c1, a1, c2, a2, a12):
 def bin_transpose(mat, transposed, col_mask):
     assign(mat, mat & 65535)
     assign(col_mask, 4369)
-    save(transposed, 'transposed')
+
     assign(transposed, ((mat & col_mask) & 1) ^ (((mat & col_mask) & 16) >> 3) ^ (((mat & col_mask) & 256) >> 6) ^
            (((mat & col_mask) & 4096) >> 9))
-    save(transposed, 'transposed')
-    assign(transposed, transposed ^ (((((mat & col_mask) & 2) >> 1) ^ (((mat & col_mask) & 32) >> 4) ^ (
-                        ((mat & col_mask) & 512) >> 7) ^
-                   (((mat & col_mask) & 8192) >> 10)) << 4))
-    save(transposed, 'transposed')
-    assign(transposed, transposed ^ (((((mat & col_mask) & 4) >> 2) ^ (((mat & col_mask) & 64) >> 5) ^ (
-                        ((mat & col_mask) & 1024) >> 8) ^
-                   (((mat & col_mask) & 16384) >> 11)) << 8))
-    save(transposed, 'transposed')
-    assign(transposed, transposed ^ (((((mat & col_mask) & 8) >> 3) ^ (((mat & col_mask) & 128) >> 6) ^ (
-                        ((mat & col_mask) & 2048) >> 9) ^
-                   (((mat & col_mask) & 32768) >> 12)) << 12))
-    save(transposed, 'transposed')
+
+    assign(transposed, transposed ^ (((((mat & (col_mask << 1)) & 2) >> 1) ^ (((mat & (col_mask << 1)) & 32) >> 4) ^ (
+                        ((mat & (col_mask << 1)) & 512) >> 7) ^
+                   (((mat & (col_mask << 1)) & 8192) >> 10)) << 4))
+
+    assign(transposed, transposed ^ (((((mat & (col_mask << 2)) & 4) >> 2) ^ (((mat & (col_mask << 2)) & 64) >> 5) ^ (
+                        ((mat & (col_mask << 2)) & 1024) >> 8) ^
+                   (((mat & (col_mask << 2)) & 16384) >> 11)) << 8))
+
+    assign(transposed, transposed ^ (((((mat & (col_mask << 3)) & 8) >> 3) ^ (((mat & (col_mask << 3)) & 128) >> 6) ^ (
+                        ((mat & (col_mask << 3)) & 2048) >> 9) ^
+                   (((mat & (col_mask << 3)) & 32768) >> 12)) << 12))
 
 
 def qua_calc_inverse_alpha(g, a, inv_a):

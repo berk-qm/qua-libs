@@ -22,4 +22,4 @@ qmm = QuantumMachinesManager(host='yuval-2539185a.dev.quantum-machines.co',port 
 job_sim = qmm.simulate(config, test, SimulationConfig(1000))
 
 res = job_sim.result_handles
-print(res.transposed.fetch_all())
+print(res.mat3.fetch_all())
