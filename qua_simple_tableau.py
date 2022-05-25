@@ -52,25 +52,26 @@ def mat_mul_qua(m1, m2, m3):
     product_lut = declare(int, value=[0, 1, 1, 0, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0])  # TODO: check if true
     col_mask = declare(int, value=4369)
     row_mask = declare(int, value=15)
-    place = declare(int, value=0)
-    up = declare(int, value=1)
-    i1 = declare(int)
-    i2 = declare(int)
-    prodt = declare(int, value=0)
-    prodnum = declare(int, value=0)
-    col = declare(int, value=0)
-    row = declare(int, value=0)
-    for i11 in range(4):
-        assign(i1, i11)
-        _get_row(m1, i1, row, row_mask)
-        for i22 in range(4):
-            assign(i2, i22)
-            _col_to_row(m2, i2, col, col_mask)
-            _rowXcol(row, col, prodnum)
-            assign(prodt, product_lut[prodnum])
-            assign(m3, m3 ^ (prodt << place))
-            assign(place, place+up)
-            save(prodnum, "prodnum")
+    transposed = declare(int, value=0)
+    bin_transpose(m2, transposed, col_mask)
+    assign(m3, m3 ^ ((product_lut[(m1 & row_mask) & (transposed & row_mask)]) ^
+                     (product_lut[((m1 & row_mask) & ((transposed & (row_mask << 4)) >> 4))] << 1) ^
+                     (product_lut[((m1 & row_mask) & ((transposed & (row_mask << 8)) >> 8))] << 2) ^
+                     (product_lut[((m1 & row_mask) & ((transposed & (row_mask << 12)) >> 12))] << 3) ^
+                     (product_lut[(((m1 & (row_mask << 4)) >> 4) & (transposed & row_mask))] << 4) ^
+                     (product_lut[(((m1 & (row_mask << 4)) >> 4) & ((transposed & (row_mask << 4)) >> 4))] << 5) ^
+                     (product_lut[(((m1 & (row_mask << 4)) >> 4) & ((transposed & (row_mask << 8)) >> 8))] << 6) ^
+                     (product_lut[(((m1 & (row_mask << 4)) >> 4) & ((transposed & (row_mask << 12)) >> 12))] << 7) ^
+                     (product_lut[(((m1 & (row_mask << 8)) >> 8) & (transposed & row_mask))] << 8) ^
+                     (product_lut[(((m1 & (row_mask << 8)) >> 8) & ((transposed & (row_mask << 4)) >> 4))] << 9) ^
+                     (product_lut[(((m1 & (row_mask << 8)) >> 8) & ((transposed & (row_mask << 8)) >> 8))] << 10) ^
+                     (product_lut[(((m1 & (row_mask << 8)) >> 8) & ((transposed & (row_mask << 12)) >> 12))] << 11) ^
+                     (product_lut[(((m1 & (row_mask << 12)) >> 12) & (transposed & row_mask))] << 12) ^
+                     (product_lut[(((m1 & (row_mask << 12)) >> 12) & ((transposed & (row_mask << 4)) >> 4))] << 13) ^
+                     (product_lut[(((m1 & (row_mask << 12)) >> 12) & ((transposed & (row_mask << 8)) >> 8))] << 14) ^
+                     (product_lut[(((m1 & (row_mask << 12)) >> 12) & ((transposed & (row_mask << 12)) >> 12))] << 15)))
+
+
 
 
 def qua_compose_alpha(c1, a1, c2, a2, a12):
@@ -123,3 +124,11 @@ def then(clifford1, clifford2):
     alpha12 = declare(int, 0)
     mat_mul_qua(clifford1 & 65535, clifford2 & 65535, g12)
     qua_compose_alpha(clifford1 & 65535,clifford1 & 983040, clifford2 & 65535,clifford2 & 983040, alpha12)
+
+
+
+
+
+
+
+
