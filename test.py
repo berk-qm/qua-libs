@@ -14,7 +14,7 @@ with program() as test:
     col_mask = declare(int, value=4369)
     save(mat3, 'mat3')
 
-    qst.bin_transpose(mat1, mat3, col_mask)
+    qst.mat_mul_qua(mat1, mat2, mat3)
     save(mat3, 'mat3')
 
 

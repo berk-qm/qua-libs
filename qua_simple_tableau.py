@@ -60,9 +60,11 @@ def mat_mul_qua(m1, m2, m3):
     prodnum = declare(int, value=0)
     col = declare(int, value=0)
     row = declare(int, value=0)
-    with for_(i1, 0, i1 < 4, i1+1):
+    for i11 in range(4):
+        assign(i1, i11)
         _get_row(m1, i1, row, row_mask)
-        with for_(i2, 0, i2 < 4, i2+1):
+        for i22 in range(4):
+            assign(i2, i22)
             _col_to_row(m2, i2, col, col_mask)
             _rowXcol(row, col, prodnum)
             assign(prodt, product_lut[prodnum])
