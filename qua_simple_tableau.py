@@ -98,7 +98,28 @@ def bin_transpose(mat, transposed, col_mask):
                    (((mat & (col_mask << 3)) & 32768) >> 12)) << 12))
 
 
-def qua_calc_inverse_alpha(g, a, inv_a):
+def beta_qua(v, u, beta):
+    lut = declare(int, value=[0, 0, 0, 0, 0, 0, 3, 1, 0, 1, 0, 3, 0, 3, 1, 0])
+
+
+def qua_calc_bi(g1, g2, ii, b_i, row_mask, g1t):
+    o_mask = declare(int, value=5)
+    e_mask = declare(int, value=10)
+    bi_lut = declare(int, value=[0, 1, 0, 0, 1, 1])
+    spe = declare(int, value=1)
+    assign(spe,1)
+    assign(b_i, bi_lut[((((o_mask << ii * 4) & g1) >> ii*4) &
+                 (((e_mask << ii * 4) & g1) >> (1+ii*4)))])
+    current = declare(int, value=0)
+    for j in range(4):
+        assign(b_i, (b_i ^ beta_qua(current, ((((g1t & (row_mask << ii*4)) >> ii*4) & (spe << j)) >> j) &
+                                    ((g2 & (row_mask << j*4)) >> j*4)))) # remember to %4
+        # b_i = (b_i + beta_qua(current, g1[j, ii] * g2[:, j])) % 4
+        assign(current, (current ^ g1[j, ii] & g2[:, j]))  # remeber to % 2
+        # current = (current + g1[j, ii] * g2[:, j]) % 2
+
+
+def qua_calc_inverse_alpha(g, a, inv_a, lamb, inv_g):
     pass
 
 
@@ -108,12 +129,12 @@ def inverse(g, alpha, inversed_g, inversed_alpha):
     col_mask = declare(int, value=4369)
     row_mask = declare(int, value=15)
     assign(left_prod, 0)
-    ct = declare(int)
-    assign(ct, 0)
+    gt = declare(int)
+    assign(gt, 0)
 
-    bin_transpose(g, ct, col_mask)
+    bin_transpose(g, gt, col_mask)
 
-    mat_mul_qua(lamb, ct, left_prod)
+    mat_mul_qua(lamb, gt, left_prod)
     mat_mul_qua(left_prod, lamb, inversed_g)
 
     qua_calc_inverse_alpha(g, alpha, inversed_alpha, lamb, inversed_g)

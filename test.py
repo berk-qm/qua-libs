@@ -12,13 +12,15 @@ with program() as test:
     mat2 = declare(int, value=33825)
     mat3 = declare(int, value=0)
     col_mask = declare(int, value=4369)
-    save(mat3, 'mat3')
+    mat3Stream = declare_stream()
+    save(mat3, mat3Stream)
 
     qst.mat_mul_qua(mat1, mat2, mat3)
-    save(mat3, 'mat3')
+    save(mat3, mat3Stream)
+    with stream_processing():
+        mat3Stream.with_timestamps().save_all('mat3')
 
-
-qmm = QuantumMachinesManager(host='yuval-2539185a.dev.quantum-machines.co',port =443,credentials=create_credentials())
+qmm = QuantumMachinesManager(host='yuval-2539185a.dev.quantum-machines.co', port=443, credentials=create_credentials())
 job_sim = qmm.simulate(config, test, SimulationConfig(1000))
 
 res = job_sim.result_handles
