@@ -12,7 +12,7 @@ from qm.QuantumMachinesManager import QuantumMachinesManager
 from qm.simulate.credentials import create_credentials
 from matplotlib import pyplot as plt
 
-from config import config
+from configuration import config
 
 cirq_qua_map = {
     cirq.LineQubit(0): "qe1",
