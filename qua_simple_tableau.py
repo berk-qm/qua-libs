@@ -144,7 +144,7 @@ def then(clifford1, clifford2):
     g12 = declare(int, 0)
     alpha12 = declare(int, 0)
     mat_mul_qua(clifford1 & 65535, clifford2 & 65535, g12)
-    qua_compose_alpha(clifford1 & 65535,clifford1 & 983040, clifford2 & 65535,clifford2 & 983040, alpha12)
+    qua_compose_alpha(clifford1 & 65535, clifford1 & 983040, clifford2 & 65535, clifford2 & 983040, alpha12)
 
 
 
