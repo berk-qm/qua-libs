@@ -44,6 +44,13 @@ def _get_col(mat, i, res_vector):
 def _rowXcol(rowt, colt, prodnumt):
     assign(prodnumt, (rowt & colt))
 
+def calc_bin_matXvec(mat, vec, res_vec, product_lut):
+    temp_prod = declare(int, value=0)
+    row_mask = int(b'1111', 2)
+    for row_ind in range(4):
+        assign(temp_prod, ((mat & row_mask) >> (4 * row_ind)) & vec)
+        assign(res_vec, res_vec | (product_lut[temp_prod] << row_ind))
+        row_mask = row_mask << 4
 
 def calc_dot_product_over_z(v1, v2, res):
     assign(res, 0)
