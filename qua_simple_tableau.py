@@ -47,6 +47,13 @@ def _get_row(mat_row, index_of_row, wrow, row_mask):
 def _rowXcol(rowt, colt, prodnumt):
     assign(prodnumt, (rowt & colt))
 
+def calc_bin_matXvec(mat, vec, res_vec, product_lut):
+    temp_prod = declare(int, value=0)
+    row_mask = int(b'1111', 2)
+    for row_ind in range(4):
+        assign(temp_prod, ((mat & row_mask) >> (4 * row_ind)) & vec)
+        assign(res_vec, res_vec | (product_lut[temp_prod] << row_ind))
+        row_mask = row_mask << 4
 
 def mat_mul_qua(m1, m2, m3):
     product_lut = declare(int, value=[0, 1, 1, 0, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0])  # TODO: check if true
@@ -98,24 +105,63 @@ def bin_transpose(mat, transposed, col_mask):
                    (((mat & (col_mask << 3)) & 32768) >> 12)) << 12))
 
 
+def py__mat_coords_to_int32_bitmap(row, col):
+    ''' assuming 0 <= row, col < 4 '''
+    return (2 ** col) << (4 * row)
+
+
 def beta_qua(v, u, beta):
+    ''' v, u are binary vectors (int32 each). '''
     lut = declare(int, value=[0, 0, 0, 0, 0, 0, 3, 1, 0, 1, 0, 3, 0, 3, 1, 0])
+    mask = declare(int, value=0)
+    v_ind = declare(int, value=0)
+    u_ind = declare(int, value=0)
+    assign(beta, 0)
+    for i in range(2):
+        assign(mask, 3 << (i * 2)) # binary mask to extract the 2 bits of current v and u.
+        assign(v_ind, (((v & mask) >> (i*2)) & 1) + ((((v & mask) >> (i*2) & 2) >> 1) * 2))
+        assign(u_ind, (((u & mask) >> (i*2)) & 1) + ((((u & mask) >> (i*2) & 2) >> 1) * 2))
+        assign(beta, beta + (lut[4*v_ind + u_ind]))
 
 
-def qua_calc_bi(g1, g2, ii, b_i, row_mask, g1t):
-    o_mask = declare(int, value=5)
-    e_mask = declare(int, value=10)
-    bi_lut = declare(int, value=[0, 1, 0, 0, 1, 1])
-    spe = declare(int, value=1)
-    assign(spe,1)
-    assign(b_i, bi_lut[((((o_mask << ii * 4) & g1) >> ii*4) &
-                 (((e_mask << ii * 4) & g1) >> (1+ii*4)))])
-    current = declare(int, value=0)
-    for j in range(4):
-        assign(b_i, (b_i ^ beta_qua(current, ((((g1t & (row_mask << ii*4)) >> ii*4) & (spe << j)) >> j) &
-                                    ((g2 & (row_mask << j*4)) >> j*4)))) # remember to %4
+def qua_calc_bi(g1, g2, ii, b_i, row_mask, g1_transpose, product_lut):
+    ''' g2 assume to be g2 =  Lg_tL (where  L is lambda matrix).
+    '''
+    assign(b_i, 0)
+
+    e_i_list = [1, 2, 1 << 2, 2 << 2]  # All the e_i vectors (e[i] = e_i) (x_0, z_0, x_1, z_1).
+    beta = declare(int, value=0)
+    beta_arg1 = declare(int, value=0)
+    beta_arg2 = declare(int, value=0)
+    for k in range(0, 4, 2):
+        calc_bin_matXvec(g2, e_i_list[k], beta_arg1, product_lut)
+        calc_bin_matXvec(g2, e_i_list[k+1], beta_arg2, product_lut)
+        beta_qua(beta_arg1, beta_arg2, beta)
+
+        gki_mask = py__mat_coords_to_int32_bitmap(k, ii)
+        gki_p1_mask = py__mat_coords_to_int32_bitmap(k+1, ii)
+
+        gki_mask_revert_shift_amount = 4 * k + ii
+        gki_p1_mask_revert_shift_amount = 4 * (k+1) + ii
+        assign(b_i, (b_i +
+                     (
+                (((g1 & gki_mask) >> gki_mask_revert_shift_amount) *
+                ((g1 & gki_p1_mask) >> gki_p1_mask_revert_shift_amount)) * (1 + beta))
+                     )
+               )
+
+        assign(b_i, b_i & 3) # Performing mod4 (b_i is NOT binary number).
+
+        assign(beta, 0) # reset beta
+
+
+        # beta_qua(current, ((((g1_transpose & (row_mask << ii*4)) >> ii*4) & (spe << j)) >> j) &
+        #                             ((g2 & (row_mask << j*4)) >> j*4)))) # remember to %4
+        # perform mod4 (&3).
+
+        # ---------------------------------------------------------
         # b_i = (b_i + beta_qua(current, g1[j, ii] * g2[:, j])) % 4
-        assign(current, (current ^ g1[j, ii] & g2[:, j]))  # remeber to % 2
+        # assign(current, (current ^ g1[j, ii] & g2[:, j]))  # remeber to % 2
         # current = (current + g1[j, ii] * g2[:, j]) % 2
 
 
