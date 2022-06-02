@@ -49,6 +49,7 @@ def _rowXcol(rowt, colt, prodnumt):
 
 def calc_bin_matXvec(mat, vec, res_vec, product_lut):
     temp_prod = declare(int, value=0)
+    assign(res_vec, 0)
     row_mask = int(b'1111', 2)
     for row_ind in range(4):
         assign(temp_prod, ((mat & row_mask) >> (4 * row_ind)) & vec)
@@ -56,7 +57,7 @@ def calc_bin_matXvec(mat, vec, res_vec, product_lut):
         row_mask = row_mask << 4
 
 def mat_mul_qua(m1, m2, m3):
-    product_lut = declare(int, value=[0, 1, 1, 0, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0])  # TODO: check if true
+    product_lut = declare(int, value=[0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0])  # TODO: check if true
     col_mask = declare(int, value=4369)
     row_mask = declare(int, value=15)
     transposed = declare(int, value=0)
@@ -124,10 +125,9 @@ def beta_qua(v, u, beta):
         assign(beta, beta + (lut[4*v_ind + u_ind]))
 
 
-def qua_calc_bi(g1, g2, ii, b_i, row_mask, g1_transpose, product_lut):
-    ''' g2 assume to be g2 =  Lg_tL (where  L is lambda matrix).
-    '''
+def qua_calc_bi(g1, g2, ii, b_i):
     assign(b_i, 0)
+    product_lut = declare(int, value=[0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0])  # TODO: check if true
 
     e_i_list = [1, 2, 1 << 2, 2 << 2]  # All the e_i vectors (e[i] = e_i) (x_0, z_0, x_1, z_1).
     beta = declare(int, value=0)
@@ -137,12 +137,19 @@ def qua_calc_bi(g1, g2, ii, b_i, row_mask, g1_transpose, product_lut):
         calc_bin_matXvec(g2, e_i_list[k], beta_arg1, product_lut)
         calc_bin_matXvec(g2, e_i_list[k+1], beta_arg2, product_lut)
         beta_qua(beta_arg1, beta_arg2, beta)
-
+        save(beta, f"beta{k}")
         gki_mask = py__mat_coords_to_int32_bitmap(k, ii)
         gki_p1_mask = py__mat_coords_to_int32_bitmap(k+1, ii)
 
         gki_mask_revert_shift_amount = 4 * k + ii
         gki_p1_mask_revert_shift_amount = 4 * (k+1) + ii
+        t1 = declare(int, value=0)
+        t2 = declare(int, value=0)
+        assign(t1, ((g1 & gki_mask) >> gki_mask_revert_shift_amount))
+        assign(t2, ((g1 & gki_p1_mask) >> gki_p1_mask_revert_shift_amount))
+
+        save(t1, "t1")
+        save(t2, "t2")
         assign(b_i, (b_i +
                      (
                 (((g1 & gki_mask) >> gki_mask_revert_shift_amount) *
