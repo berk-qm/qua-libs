@@ -68,6 +68,68 @@ class TestQUASimpleTableau:
             print(f"Test Failed!! {mat=},  {vec=}")
         return
 
+    def run_bin_matmul(self, m1, m2):
+        m1_int = self.matrix_to_int32(m1)
+        m2_int = self.matrix_to_int32(m2)
+        with program() as p:
+            _m1 = declare(int, value=m1_int)
+            _m2 = declare(int, value=m2_int)
+            res = declare(int, value=0)
+            qst.mat_mul_qua(_m1, _m2, res)
+            save(res, "res")
+
+        qua_res = self.run_qmm_simulation(p, "res")
+        ref_res = self.matrix_to_int32(m1 @ m2)
+        return qua_res, ref_res
+
+    def test_bin_matmul(self, m1=None, m2=None, num_to_run=10):
+        print(f"\n===== Running: test_bin_matmul ====== \n")
+        num_pass, num_failed = 0,0
+        for i in range(num_to_run):
+            if m1 is None and m2 is None:
+                _m1 = np.random.randint(0, 2, [self.num_qubits * 2] * 2)
+                _m2 = np.random.randint(0, 2, [self.num_qubits * 2] * 2)
+            else:
+                _m1, _m2 = m1, m2
+            qua_res, ref_res = self.run_bin_matmul(_m1, _m2)
+            if qua_res == ref_res:
+                num_pass += 1
+            else:
+                num_failed += 1
+                print(f"Test Failed(Matmul!) with \n{_m1=}\n{_m2=}")
+        return
+
+    def run_single_mat_transpose(self, m):
+        m_int = self.matrix_to_int32(m)
+        with program() as p:
+            _m = declare(int, value=m_int)
+            res = declare(int, value=0)
+            col_mask = declare(int)
+            qst.bin_transpose(_m, res, col_mask)
+            save(res, "res")
+
+        qua_mt = self.run_qmm_simulation(p, "res")
+        ref_mt = self.matrix_to_int32(m.T)
+        return qua_mt, ref_mt
+
+    def test_mat_transpose(self, m=None, num_to_run=10):
+        print(f"\n===== Running: test_mat_transpose ====== \n")
+        if m is not None:
+            num_to_run = 1
+
+        num_passed, num_failed = 0,0
+        for i in range(num_to_run):
+            if m is None:
+                m = np.random.randint(0,2, [self.num_qubits * 2] * 2)
+            qua_transpose, ref_transpose = self.run_single_mat_transpose(m)
+            if qua_transpose == ref_transpose:
+                num_passed += 1
+            else:
+                num_failed += 1
+                print(f"Failed!: \n{m=}")
+        if num_passed == num_to_run:
+            print("test_mat_transpose: All Passed!")
+        return
 
 
     def run_single_beta_calc(self, v,u):
@@ -161,6 +223,8 @@ class TestQUASimpleTableau:
         return
 
 tester = TestQUASimpleTableau(2)
+# tester.test_mat_transpose()
+tester.test_bin_matmul()
 # for i in range(10):
 #     tester.test_matXvec()
 
