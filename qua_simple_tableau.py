@@ -31,26 +31,21 @@ def _col_to_row(mat_col, index_of_col, wcol, col_mask):
     save(col_mask, 'col_mask')
 
 
-def _get_row(mat_row, index_of_row, wrow, row_mask):
-    assign(row_mask, 15)
-    with switch_(index_of_row):
-        with case_(0):
-            assign(wrow, mat_row & row_mask)
-        with case_(1):
-            assign(wrow, ((mat_row & (row_mask << 4)) >> 4))
-        with case_(2):
-            assign(wrow, ((mat_row & (row_mask << 8)) >> 8))
-        with case_(3):
-            assign(wrow, ((mat_row & (row_mask << 12)) >> 12))
+def _get_row(mat_row, index_of_row):
+    row_mask = int(b'1111', 2) << 4*index_of_row
+    row = declare(int, value=0)
+    assign(row, (mat_row& row_mask) >> (4*index_of_row))
+    return row
 
 
 def _get_col(mat, i, res_vector):
     assign(res_vector, 0)
-    i_th_col_mask = int("0001_0001_0001_0001", 2) << i
-    col_values = declare(int, value = mat & i_th_col_mask)
-    for col in range(4):
-        single_val_mask = (2**i) << 4*col
-        assign(res_vector, res_vector | (col_values & single_val_mask >> 4*col))
+    i_th_col_mask = int(b"0001_0001_0001_0001", 2) << i
+    col_values = declare(int, value = 0)
+    assign(col_values,  mat & i_th_col_mask)
+    for row in range(4):
+        single_val_mask = (2**i) << (4*row)
+        assign(res_vector, res_vector | (((col_values & single_val_mask) >> (4 * row) >> i) << row))
 
 
 def _rowXcol(rowt, colt, prodnumt):
@@ -102,7 +97,12 @@ def qua_mat_mul_over_z2(m1, m2, m3):
 
 
 
-
+def calc_inverse_g(g, lamd, inv_g):
+    gt =declare(int)
+    bin_transpose(g, gt)
+    temp_prod = declare(int)
+    qua_mat_mul_over_z2(gt, lamd, temp_prod)
+    qua_mat_mul_over_z2(lamd, temp_prod, inv_g)
 
 def bin_transpose(mat, transposed):
     assign(mat, mat & 65535)
@@ -122,6 +122,13 @@ def bin_transpose(mat, transposed):
     assign(transposed, transposed ^ (((((mat & (col_mask << 3)) & 8) >> 3) ^ (((mat & (col_mask << 3)) & 128) >> 6) ^ (
                         ((mat & (col_mask << 3)) & 2048) >> 9) ^
                    (((mat & (col_mask << 3)) & 32768) >> 12)) << 12))
+
+def qua_calc_dot_bin_vec_reg_vec(bin_vec, reg_vec):
+    return (bin_vec & (2**0)) * reg_vec[0] + \
+                        ((bin_vec & (2**1)) >> 1) * reg_vec[1] + \
+                        ((bin_vec & (2**2)) >> 2) * reg_vec[2] + \
+                        ((bin_vec & (2**3)) >> 3) * reg_vec[3]
+
 
 
 def py__mat_coords_to_int32_bitmap(row, col):
@@ -143,7 +150,33 @@ def beta_qua(v, u, beta):
         assign(beta, beta + (lut[4*v_ind + u_ind]))
 
 
-def qua_calc_bi(g1, g2, ii, b_i):
+def qua_calc_bi(g1, g2, i, b_i):
+    assign(b_i, 0)
+    g1_ith_col = declare(int, value=0)
+    g2_ith_col = declare(int, value=0)
+    temp_beta = declare(int, value=0)
+    _get_col(g1, i, g1_ith_col)
+    _get_col(g2, i, g2_ith_col)
+
+    for j in range(0, 4, 2):
+        assign(b_i, b_i + (((g1_ith_col & (2**j)) >> j) & ((g2_ith_col & (2** (j+1))) >> (j+1))))
+
+    assign(b_i, b_i & 3)
+
+    current = declare(int, value=0)
+    g2_jth_col = declare(int, value=0)
+    for j in range(4):
+        with if_(~(( g1_ith_col & (2**j)) == 0)):
+            _get_col(g2, j, g2_jth_col)
+            beta_qua(current, g2_jth_col, temp_beta)
+            assign(current, current ^ g2_jth_col)
+        with else_():
+            assign(temp_beta, 0)
+        assign(b_i, b_i + temp_beta)
+        assign(b_i, b_i & 3) # mod4
+
+
+def qua_calc_bi_docs(g1, g2, ii, b_i):
     assign(b_i, 0)
     product_lut = declare(int, value=[0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0])
 
@@ -203,18 +236,28 @@ def qua_compose_alpha(g1, alpha1, g2, alpha2, a12_res):
         assign(a12_res[i], two_alpha_21[i] >> 1) # divide by 2.
 
 
-def qua_calc_inverse_alpha(g, alpha, lamb, inv_g, res_inv_a):
+def qua_calc_inverse_alpha(g, alpha, inv_g, res_inv_a):
     b = declare(int, value=[0,0,0,0])
     temp_bi = declare(int, value=0)
     for i in range(4):
         qua_calc_bi(g, inv_g, i, temp_bi)
         assign(b[i], temp_bi)
+
+    for j in range(4):
+        save(b[j], f"b{j}")
+
+
     inv_g1_transpose = declare(int, value=0)
     bin_transpose(inv_g, inv_g1_transpose)
+    save(inv_g1_transpose, "g1_t_inv")
+    temp_2alpha_plus_b = declare(int, value=[0,0,0,0])
     for i in range(4):
-        assign(res_inv_a[i], (-1 * (2 * alpha[i] + b[i]) & 3) >> 1)
+        assign(temp_2alpha_plus_b[i], ((2 * alpha[i] + b[i])))
+        save(temp_2alpha_plus_b[i], f"temp_2alpha_plus_b{i}")
 
-    return
+    for i in range(4):
+        assign(res_inv_a[i], (qua_calc_dot_bin_vec_reg_vec(_get_row(inv_g1_transpose, i), temp_2alpha_plus_b)))
+        assign(res_inv_a[i], (3 - ((res_inv_a[i] -1) & 3)) >> 1)
 
 
 def inverse(g, alpha, inversed_g, inversed_alpha):
@@ -228,8 +271,8 @@ def inverse(g, alpha, inversed_g, inversed_alpha):
 
     bin_transpose(g, gt)
 
-    mat_mul_qua(lamb, gt, left_prod)
-    mat_mul_qua(left_prod, lamb, inversed_g)
+    qua_mat_mul_over_z2(lamb, gt, left_prod)
+    qua_mat_mul_over_z2(left_prod, lamb, inversed_g)
 
     qua_calc_inverse_alpha(g, alpha, inversed_alpha, lamb, inversed_g)
 
@@ -237,7 +280,7 @@ def inverse(g, alpha, inversed_g, inversed_alpha):
 def then(clifford1, clifford2):
     g12 = declare(int, 0)
     alpha12 = declare(int, 0)
-    mat_mul_qua(clifford1 & 65535, clifford2 & 65535, g12)
+    qua_mat_mul_over_z2(clifford1 & 65535, clifford2 & 65535, g12)
     qua_compose_alpha(clifford1 & 65535, clifford1 & 983040, clifford2 & 65535, clifford2 & 983040, alpha12)
 
 

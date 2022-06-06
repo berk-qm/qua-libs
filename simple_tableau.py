@@ -232,16 +232,16 @@ _int_bit_map = {
 }
 
 
-def stim_to_simple(tableau: stim._stim_march_sse2.Tableau) -> SimpleTableau:
-    n = len(tableau)
-    g = np.zeros((2 * n, 2 * n), dtype=np.uint8)
-    alpha = np.zeros(2 * n, dtype=np.uint8)
-    for j in range(0, 2 * n, 2):
-        pauli_string_x = tableau.x_output(j // 2)
-        pauli_string_z = tableau.z_output(j // 2)
-        alpha[j] = pauli_string_x.sign.real < 0
-        alpha[j + 1] = pauli_string_z.sign.real < 0
-        for i in range(0, 2 * n, 2):
-            g[i:i + 2, j] = _int_bit_map[pauli_string_x[i // 2]]
-            g[i:i + 2, j + 1] = _int_bit_map[pauli_string_z[i // 2]]
-    return SimpleTableau(g, alpha)
+# def stim_to_simple(tableau: stim._stim_march_sse2.Tableau) -> SimpleTableau:
+#     n = len(tableau)
+#     g = np.zeros((2 * n, 2 * n), dtype=np.uint8)
+#     alpha = np.zeros(2 * n, dtype=np.uint8)
+#     for j in range(0, 2 * n, 2):
+#         pauli_string_x = tableau.x_output(j // 2)
+#         pauli_string_z = tableau.z_output(j // 2)
+#         alpha[j] = pauli_string_x.sign.real < 0
+#         alpha[j + 1] = pauli_string_z.sign.real < 0
+#         for i in range(0, 2 * n, 2):
+#             g[i:i + 2, j] = _int_bit_map[pauli_string_x[i // 2]]
+#             g[i:i + 2, j + 1] = _int_bit_map[pauli_string_z[i // 2]]
+#     return SimpleTableau(g, alpha)

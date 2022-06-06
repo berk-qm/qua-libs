@@ -1,5 +1,6 @@
 import random
 
+from typing import Union, List
 import qua_simple_tableau as qst
 from qm.QuantumMachinesManager import QuantumMachinesManager, SimulationConfig
 from qm.qua import *
@@ -12,6 +13,7 @@ import simple_tableau
 
 
 LUT_4BIT_ADD_TO_MOD = [bin(i).strip("0b").count("1") % 2 for i in range(16)]
+
 
 
 class TestQUASimpleTableau:
@@ -27,11 +29,17 @@ class TestQUASimpleTableau:
         return
 
 
-    def run_qmm_simulation(self, _program, var_to_save):
+    def run_qmm_simulation(self, _program, vars_to_save: Union[List, str, None]):
         job_sim = self.qmm.simulate(config, _program, SimulationConfig(100000))
         res = job_sim.result_handles
-        res.__getattribute__(var_to_save).wait_for_all_values()
-        return res.__getattribute__(var_to_save).fetch_all()[0][0]
+        res.wait_for_all_values()
+        if isinstance(vars_to_save, list):
+            final_res = [res.__getattribute__(var_name).fetch_all()[0][0] for var_name in vars_to_save]
+        elif isinstance(vars_to_save, str):
+            final_res = res.__getattribute__(vars_to_save).fetch_all()[0][0]
+        else:
+            final_res = None
+        return final_res
 
     def array_to_int32(self, arr):
         return int(sum([i * 2 ** e for e, i in enumerate(arr)]))
@@ -68,6 +76,28 @@ class TestQUASimpleTableau:
             print(f"Test Failed!! {mat=},  {vec=}")
         return
 
+    def test_get_col(self, m=None, col_ind=None):
+        if m is None:
+            m = np.random.randint(0, 2, [self.num_qubits*2]*2)
+        if col_ind is None:
+            col_ind = np.random.randint(0, self.num_qubits* 2 )
+
+        m_int = self.matrix_to_int32(m)
+        with program() as p:
+            _m = declare(int, value=m_int)
+            col = declare(int, value=0)
+            qst._get_col(_m, col_ind, col)
+            save(col, "col_res")
+
+        qua_col = self.run_qmm_simulation(p, "col_res")
+        ref_col = self.array_to_int32(m[:, col_ind])
+        if qua_col == ref_col:
+            print("Test Passed!")
+        else:
+            print(f"Test Failed!! {m=},  {col_ind=}")
+        return
+
+
     def run_bin_matmul(self, m1, m2):
         m1_int = self.matrix_to_int32(m1)
         m2_int = self.matrix_to_int32(m2)
@@ -75,11 +105,11 @@ class TestQUASimpleTableau:
             _m1 = declare(int, value=m1_int)
             _m2 = declare(int, value=m2_int)
             res = declare(int, value=0)
-            qst.mat_mul_qua(_m1, _m2, res)
+            qst.qua_mat_mul_over_z2(_m1, _m2, res)
             save(res, "res")
 
         qua_res = self.run_qmm_simulation(p, "res")
-        ref_res = self.matrix_to_int32(m1 @ m2)
+        ref_res = self.matrix_to_int32((m1 @ m2) % 2)
         return qua_res, ref_res
 
     def test_bin_matmul(self, m1=None, m2=None, num_to_run=10):
@@ -104,8 +134,7 @@ class TestQUASimpleTableau:
         with program() as p:
             _m = declare(int, value=m_int)
             res = declare(int, value=0)
-            col_mask = declare(int)
-            qst.bin_transpose(_m, res, col_mask)
+            qst.bin_transpose(_m, res)
             save(res, "res")
 
         qua_mt = self.run_qmm_simulation(p, "res")
@@ -222,14 +251,144 @@ class TestQUASimpleTableau:
 
         return
 
+    def test_alpha_composition(self):
+        ...
+
+    def run_inverse_alpha_calc(self, g1, alpha1):
+        g1_int = self.matrix_to_int32(g1)
+        # alpha1_int = self.array_to_int32(alpha1)
+        with program() as p:
+            _g1 = declare(int, value=g1_int)
+            _alpha1 = declare(int, value=alpha1)
+            lamb = declare(int, value=18450)
+            inv_g = declare(int)
+            qst.calc_inverse_g(_g1, lamb, inv_g)
+            inv_alpha = declare(int, value=[0,0,0,0])
+            qst.qua_calc_inverse_alpha(_g1, _alpha1, inv_g, inv_alpha)
+            for i in range(4):
+                save(inv_alpha[i], f"inv_alpha{i}")
+
+        inv_alpha_qua = np.array(self.run_qmm_simulation(p, [f"inv_alpha{i}" for i in range(4)]))
+        inv_alpha_ref = simple_tableau._calc_inverse_alpha(g1, np.array(alpha1))
+        if np.array_equal(inv_alpha_ref, inv_alpha_qua):
+            print(f"Test Passed! {inv_alpha_ref=}")
+        else:
+            print(f"Test Failed! \n {g1=} \n {alpha1=} \n {inv_alpha_ref=}, {inv_alpha_qua=}")
+        return
+
+    def test_inv_g(self, g):
+        inv_g = simple_tableau._lambda(self.num_qubits) @ g.T @ simple_tableau._lambda(self.num_qubits)
+        g_int = self.matrix_to_int32(g)
+        with program() as p:
+          _g = declare(int, value=g_int)
+          lamb = declare(int, value=18450)
+          _inv_g = declare(int, value=0)
+          qst.calc_inverse_g(_g, lamb, _inv_g)
+          save(_inv_g, "inv_g")
+
+        inv_g_qua = self.run_qmm_simulation(p, "inv_g")
+        inv_g_ref = self.matrix_to_int32(inv_g)
+        if inv_g_qua == inv_g_ref:
+            print("Test Passed")
+        else:
+            print("Failed!!")
+
+        return
+
+
+    def test_inverse_alpha(self, g1=None, alpha1=None, num_to_run=10):
+        if g1 is None:
+            g1 = self.get_random_symplectic_matrix()
+        if alpha1 is None:
+            alpha1 = np.random.randint(0,2, [4,]).tolist()
+
+        self.run_inverse_alpha_calc(g1, alpha1)
+        return
+
+
+    def run_test(self):
+        with program() as p:
+            c = declare(int, value=0)
+            assign(c, 5)
+            play("readout", "lockin")
+
+        with program() as p1:
+            c = declare(int, value=0)
+            b = declare(int, value=5)
+            res = declare(int, value=0)
+            func_test_with_res(b,c,res)
+            save(res, "res")
+
+        with program() as p2:
+            c = declare(int, value=0)
+            b = declare(int, value=5)
+            res = declare(int, value=0)
+            assign(res, func_test_no_res(b,c))
+            save(res, "res")
+        print(self.run_qmm_simulation(p, None))
+
 tester = TestQUASimpleTableau(2)
+
+
+
+
+
+
+
+def func_test_with_res(b,c, d):
+    assign(d, b+c)
+
+def func_test_no_res(b,c):
+    e = declare(int)
+    assign(e, b+c)
+    return e
+
+# qmm = QuantumMachinesManager(host="localhost", port=9510)
+
+# with program() as prog:
+#     c =declare(int, value=0)
+
+
+# with program() as p1:
+#     c = declare(int, value=0)
+#     b = declare(int, value=5)
+#     res = declare(int, value=0)
+#     func_test_with_res(b,c,res)
+#
+#
+# with program() as p2:
+#     c = declare(int, value=0)
+#     b = declare(int, value=5)
+#     res = declare(int, value=0)
+#     assign(res, func_test_no_res(b,c))
+
+
+# tester.run_qmm_simulation(prog, None)
+# exit()
+mat =np.array([[0, 1, 1, 0],
+               [0, 1, 0, 1],
+               [1, 0, 1, 1],
+               [1, 1, 1, 1]])
+# tester.run_test()
+g1=np.array([[0, 1, 0, 0],
+       [1, 0, 0, 0],
+       [0, 0, 0, 1],
+       [0, 0, 1, 0]])
+alpha1 = [1, 1, 0, 0]
+for i in range(10):
+    tester.test_inverse_alpha()
+# tester.test_get_col()
+exit()
+
+# tester.test_get_col()
 # tester.test_mat_transpose()
-tester.test_bin_matmul()
+# tester.test_bin_matmul()
 # for i in range(10):
 #     tester.test_matXvec()
 
-print("Testing b_i")
+# print("Testing b_i")
 # tester.test_bi()
+# exit()
 
 
 
@@ -257,8 +416,8 @@ def simulate_beta(v,u):
     beta = 0
     for i in range(2):
         mask =  3 << i * 2
-        v_ind = ((((v & mask) >> (i*2)) & 2) >> 1) + ((v & mask) >> (i*2) & 1) * 2
-        u_ind = ((((u & mask) >> (i*2)) & 2) >> 1) + ((u & mask) >> (i**2) & 1) * 2
+        v_ind = (((v & mask) >> (i*2)) & 1) + ((((v & mask) >> (i*2) & 2) >> 1) * 2)
+        u_ind = (((u & mask) >> (i*2)) & 1) + ((((u & mask) >> (i*2) & 2) >> 1) * 2)
         beta += (lut[4*v_ind + u_ind])
     return beta
 
@@ -283,6 +442,39 @@ def test_all_beta():
 def py__mat_coords_to_int32_bitmap(row, col):
     ''' assuming 0 <= row, col < 4 '''
     return (2 ** col) << (4 * row)
+
+def simulate_get_col(m, col):
+    i_th_col_mask = int(b"0001_0001_0001_0001", 2) << col
+    col_values = m & i_th_col_mask
+    res_vector = 0
+    for row in range(4):
+        single_val_mask = (2**col) << (4*row)
+        res_vector = res_vector | (((col_values & single_val_mask) >> (4 * row) >> col) << row)
+    return res_vector
+
+def simulate_b_calc_python(g1, g2, i):
+    g1_ith_col = simulate_get_col(g1, i)
+    g2_ith_col =  simulate_get_col(g2, i)
+
+    b_i = 0
+    for j in range(0, 4, 2):
+       b_i +=  ((g1_ith_col & (2**j)) >> j) & ((g2_ith_col & (2** (j+1))) >> (j+1))
+
+    b_i = b_i & 3
+
+    current = 0
+    for j in range(4):
+        if (( g1_ith_col & (2**j)) != 0):
+            g2_jth_col =  simulate_get_col(g2, j)
+            temp_beta = simulate_beta(current, g2_jth_col)
+            current = current ^ g2_jth_col
+        else:
+            temp_beta = 0
+        b_i += temp_beta
+        b_i =  b_i & 3
+
+
+    return b_i
 
 
 def simulate_b_calc(g1,g2, ii):
@@ -336,8 +528,9 @@ mat2 =np.array([[1, 0, 0, 0],
                [0, 0, 1, 0],
                [1, 0, 0, 1]])
 
-tester.test_beta(np.matmul(mat2, [1,0,0,0]), np.matmul(mat2, [0,1,0,0]), 1)
-tester.test_beta(np.matmul(mat2, [0,0,1,0]), np.matmul(mat2, [0,0,0,1]), 1)
+# tester.test_beta(np.matmul(mat2, [1,0,0,0]), np.matmul(mat2, [0,1,0,0]), 1)
+# tester.test_beta(np.matmul(mat2, [0,0,1,0]), np.matmul(mat2, [0,0,0,1]), 1)
+# simulate_b_calc_python(bin_mat_to_int32(mat), bin_mat_to_int32(mat2), 2)
 tester.test_bi(mat, mat2, 1)
 exit()
 # mat = [[1,1,1,0], [1,0,0,1],[1,1,1,1],[1,1,1,1]]
