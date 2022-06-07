@@ -59,14 +59,12 @@ with program() as prog:
                     gate = two_qubit_paulis[i].operation_at(q2, 0).gate
                     play_phased_xz(gate, q2)
 
-        # play Symplectic Clifford
-        assign(c_rand, rand.rand_int(720))
+        # # play Symplectic Clifford
+        assign(c_rand, rand.rand_int(6))
         moment = 0
         op_in_moment = 1  # this is because 0 to 6 are on qubit 1 (counting from 0)
-        with if_(c_rand > 5):
-            assign(c_rand, 1)
         with switch_(c_rand, unsafe=True):
-            for i in range(720):
+            for i in range(6):
                 with case_(i):
                     gate = symplectic_circuits[i][moment].operations[op_in_moment].gate
                     qubit = symplectic_circuits[i][moment].operations[op_in_moment].qubits[0]
