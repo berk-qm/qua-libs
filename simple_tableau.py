@@ -31,6 +31,7 @@ def _compose_alpha(g1, alpha1, g2, alpha2):
     for i in range(2 * n):
         b_i = _calc_b_i(g1, g2, i)
         two_alpha21[i] += (2 * alpha1[i] + 2 * np.dot(g1[:, i], alpha2) + b_i) % 4
+        print(f"{b_i=}, {two_alpha21[i]=}")
         assert two_alpha21[i] % 2 == 0
         alpha21.append(two_alpha21[i] // 2)
     return np.array(alpha21).astype(np.uint8)
@@ -46,6 +47,7 @@ def _calc_b_i(g1, g2, i):
     for j in range(2 * n):
         b_i = (b_i + _beta(current, g1[j, i] * g2[:, j])) % 4
         current = (current + g1[j, i] * g2[:, j]) % 2
+        # print(f'{j=}, {b_i=}, {current=}')
     return b_i
 
 
@@ -53,7 +55,9 @@ def _calc_inverse_alpha(g1, alpha1):
     n = len(alpha1) // 2
     lam = _lambda(n)
     inv_g1 = lam @ g1.T @ lam % 2
+    # print(f'{inv_g1=} \n')
     b = np.array([_calc_b_i(g1, inv_g1, i) for i in range(2 * n)])
+    # print(f'{b=} \n')
     two_alpha2 = -(inv_g1.T @ (2 * alpha1 + b)) % 4
     assert np.all(two_alpha2 % 2 == 0)
     return two_alpha2 // 2
