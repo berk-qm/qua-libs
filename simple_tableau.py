@@ -31,7 +31,6 @@ def _compose_alpha(g1, alpha1, g2, alpha2):
     for i in range(2 * n):
         b_i = _calc_b_i(g1, g2, i)
         two_alpha21[i] += (2 * alpha1[i] + 2 * np.dot(g1[:, i], alpha2) + b_i) % 4
-        print(f"{b_i=}, {two_alpha21[i]=}")
         assert two_alpha21[i] % 2 == 0
         alpha21.append(two_alpha21[i] // 2)
     return np.array(alpha21).astype(np.uint8)

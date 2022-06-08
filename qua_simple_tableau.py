@@ -225,6 +225,7 @@ def qua_compose_alpha(g1, alpha1, g2, alpha2, a12_res):
 
 def qua_calc_inverse_alpha(g, alpha, inv_g, res_inv_a):
     b = declare(int, value=[0,0,0,0])
+    temp_res_inv_a = declare(int, value=[0,0,0,0])
     temp_bi = declare(int, value=0)
     for i in range(4):
         qua_calc_bi(g, inv_g, i, temp_bi)
@@ -234,11 +235,11 @@ def qua_calc_inverse_alpha(g, alpha, inv_g, res_inv_a):
     bin_transpose(inv_g, inv_g1_transpose)
     temp_2alpha_plus_b = declare(int, value=[0,0,0,0])
     for i in range(4):
-        assign(temp_2alpha_plus_b[i], ((2 * alpha[i] + b[i])))
+        assign(temp_2alpha_plus_b[i], (2 * ((alpha & (2**i)) >> i) + b[i]))
 
     for i in range(4):
-        assign(res_inv_a[i], (qua_calc_dot_bin_vec_reg_vec(_get_row(inv_g1_transpose, i), temp_2alpha_plus_b)))
-        assign(res_inv_a[i], (3 - ((res_inv_a[i] -1) & 3)) >> 1)
+        assign(temp_res_inv_a[i], (qua_calc_dot_bin_vec_reg_vec(_get_row(inv_g1_transpose, i), temp_2alpha_plus_b)))
+        assign(res_inv_a, res_inv_a | (((3 - ((temp_res_inv_a[i] -1) & 3)) >> 1) << i))
 
 
 def inverse(g, alpha, inversed_g, inversed_alpha):
