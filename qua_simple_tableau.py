@@ -87,15 +87,14 @@ def qua_mat_mul_over_z2(m1, m2, m3):
 
 
 def calc_inverse_g(g, lamd, inv_g):
-    gt =declare(int)
+    gt = declare(int, value=0)
     bin_transpose(g, gt)
-    temp_prod = declare(int)
+    temp_prod = declare(int, value=0)
     qua_mat_mul_over_z2(gt, lamd, temp_prod)
     qua_mat_mul_over_z2(lamd, temp_prod, inv_g)
 
 
 def bin_transpose(mat, transposed):
-    assign(mat, mat & 65535)
     col_mask = declare(int, value=int(b'0001_0001_0001_0001', 2))
 
     assign(transposed, ((mat & col_mask) & 1) ^ (((mat & col_mask) & 16) >> 3) ^ (((mat & col_mask) & 256) >> 6) ^
@@ -244,22 +243,11 @@ def qua_calc_inverse_alpha(g, alpha, inv_g, res_inv_a):
 
 def inverse(g, alpha, inversed_g, inversed_alpha):
     lamb = declare(int, value=18450)
-    left_prod = declare(int)
-    assign(left_prod, 0)
-    gt = declare(int)
-    assign(gt, 0)
-
-    bin_transpose(g, gt)
-
-    qua_mat_mul_over_z2(lamb, gt, left_prod)
-    qua_mat_mul_over_z2(left_prod, lamb, inversed_g)
-
-    qua_calc_inverse_alpha(g, alpha, lamb, inversed_alpha)
+    calc_inverse_g(g, lamb, inversed_g)
+    qua_calc_inverse_alpha(g, alpha, inversed_g, inversed_alpha)
 
 
-def then(clifford1, clifford2):
-    g12 = declare(int, value=0)
-    alpha12 = declare(int, value=0)
-    qua_mat_mul_over_z2(clifford1 & 65535, clifford2 & 65535, g12)
-    qua_compose_alpha(clifford1 & 65535, clifford1 & 983040, clifford2 & 65535, clifford2 & 983040, alpha12)
+def then(g1, alpha1, g2, alpha2, g12, alpha12):
+    qua_mat_mul_over_z2(g1, g2, g12)
+    qua_compose_alpha(g1, alpha1, g2, alpha2, alpha12)
 
