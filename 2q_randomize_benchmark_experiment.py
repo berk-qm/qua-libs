@@ -27,7 +27,7 @@ class Utils:
         for row_i, row in enumerate(mat):
             rep_num = sum([i * 2 ** e for e, i in enumerate(row)])
             r |= rep_num << (row_i * 4)
-        return r
+        return int(r)
 
     @staticmethod
     def qua_add_binary_search_block(val_to_search, target_list, target_list_size: int, result_ind):
@@ -54,28 +54,143 @@ class Utils:
     def bitN(on_value, N):
         return (on_value & (2 ** N)) >> N
 
+    @staticmethod
+    def get_4bit(val, n):
+        assert (0 <= n < 8)
+        return (val & (15 << (4 * n))) >> (4 * n)
+
 
 class Paulis:
-    identity = np.identity(2, dtype=np.int)
-    sigma_x = np.array([[0,1], [1,0]])
-    sigma_y = np.array([[0, -1],[1,0]])
-    sigma_z = np.array([[1,0], [0,-1]])
-    all_vals = []
+    # identity = np.identity(2, dtype=np.int)
+    # sigma_x = np.array([[0,1], [1,0]])
+    # sigma_y = np.array([[0, -1],[1,0]])
+    # sigma_z = np.array([[1,0], [0,-1]])
+    # all_vals = []
+    #
+    # for comb in product([sigma_x, sigma_z, sigma_y, identity], repeat=2):
+    #     all_vals.append(np.kron(comb[0], comb[1]))
 
-    for comb in product([sigma_x, sigma_z, sigma_y, identity], repeat=2):
-        all_vals.append(np.kron(comb[0], comb[1]))
-
-    q1, q2 = cirq.LineQubit.range(2)
     pauli_I = cirq.PhasedXZGate(x_exponent=0, z_exponent=0, axis_phase_exponent=0)
     pauli_X = cirq.PhasedXZGate(x_exponent=1, z_exponent=0, axis_phase_exponent=0)
     pauli_Z = cirq.PhasedXZGate(x_exponent=0, z_exponent=1, axis_phase_exponent=0)
     pauli_Y = cirq.PhasedXZGate(x_exponent=1, z_exponent=0, axis_phase_exponent=0.5)
 
-    two_qubit_paulis = []
-    for op1, op2 in product([pauli_I, pauli_X, pauli_Z, pauli_Y], repeat=2):
-        two_qubit_paulis.append(cirq.Circuit([op1(q1), op2(q2)]))
+    I = np.array([0,0])
+    X = np.array([1,0])
+    Z = np.array([0,1])
+    Y = np.array([1,1])
 
-    two_qubit_paulis_alpha_vecs = [[0,0,0,0]] * 16 # TODO!
+    def __init__(self, num_qubits):
+        assert (num_qubits in [1,2])
+        self.paulis_alpha_vecs_reduced = [self.I, self.X, self.Z, self.Y]
+        if num_qubits == 1:
+            q = cirq.LineQubit(0)
+            self.paulis_circuits = [cirq.Circuit(op(q)) for op in [self.pauli_I, self.pauli_X, self.pauli_Z, self.pauli_Y]]
+            self.paulis_alpha_vecs = [np.hstack(([0,0], v)) for v in self.paulis_alpha_vecs_reduced]
+        else:
+            q1, q2 = cirq.LineQubit.range(2)
+            self.paulis_circuits = []
+            for op1, op2 in product([self.pauli_I, self.pauli_X, self.pauli_Z, self.pauli_Y], repeat=2):
+                self.paulis_circuits.append(cirq.Circuit([op1(q1), op2(q2)]))
+
+            self.paulis_alpha_vecs = []
+            for comb in product(self.paulis_alpha_vecs_reduced, repeat=2):
+                self.paulis_alpha_vecs.append(np.hstack((comb[0], comb[1])))
+
+
+class SingleQubitSymplacticCompilationData:
+    _c1_ops = [
+        ('I',),  # XZ ++
+        ('X',),  # XZ +-
+        ('Z',),  # XZ -+
+        ('Y',),  # XZ --
+
+        ('-SX',),  # XY ++
+        ('SX',),  # XY +-
+        ('Y', 'SX'),  # XY -+
+        ('Y', '-SX'),  # XY --
+
+        ('X', '-SY'),  # ZX ++
+        ('-SY',),  # ZX +-
+        ('SY',),  # ZX -+
+        ('X', 'SY'),  # ZX --
+
+        ('-SX', '-SY'),  # ZY ++
+        ('SX', '-SY'),  # ZY +-
+        ('-SX', 'SY'),  # ZY -+
+        ('SX', 'SY'),  # ZY --
+
+        ('SY', 'SX'),  # YX ++
+        ('-SY', '-SX'),  # YX +-
+        ('SY', '-SX'),  # YX -+
+        ('-SY', 'SX'),  # YX --
+
+        ('-SX', 'SY', 'SX'),  # YZ ++
+        ('SX', 'SY', 'SX'),  # YZ +-
+        ('-SX', '-SY', 'SX'),  # YZ -+
+        ('-SX', 'SY', '-SX'),  # YZ --
+    ]
+
+    _gate_from_op = {
+        'I': cirq.I,
+        'X': cirq.X,
+        'Y': cirq.Y,
+        'Z': cirq.Z,
+        'SX': cirq.X ** 0.5,
+        'SY': cirq.Y ** 0.5,
+        '-SX': cirq.X ** -0.5,
+        '-SY': cirq.Y ** -0.5,
+    }
+
+    _symplectic_matrices_reduced = []
+    _symplectic_matrices = []
+
+    _single_qubit_gate_conversions = {
+        'I': (np.identity(2), np.zeros(2)),
+        'H': (np.array([[0, 1], [1, 0]]), np.zeros(2)),
+        'X': (np.identity(2), np.array([0, 1])),
+        'Z': (np.identity(2), np.array([1, 0])),
+        'Y': (np.identity(2), np.array([1, 1])),
+        'S': (np.array([[1, 0], [1, 1]]), np.zeros(2)),
+        'SX': (np.array([[1, 1], [0, 1]]), np.array([0, 1])),
+        'SY': (np.array([[0, 1], [1, 0]]), np.array([1, 0])),
+        '-SY': (np.array([[0, 1], [1, 0]]), np.array([0, 1])),
+        '-SX': (np.array([[1, 1], [0, 1]]), np.array([0, 0])),
+    }
+    q1 = cirq.LineQubit(0)
+    C1_reduced_q1_XZ = [cirq.Circuit(g) for g in [cirq.PhasedXZGate(axis_phase_exponent=0, x_exponent=0, z_exponent=0)(q1),
+                             cirq.PhasedXZGate(axis_phase_exponent=0, x_exponent=-0.5, z_exponent=0)(q1),
+                             cirq.PhasedXZGate(axis_phase_exponent=0.5, x_exponent=-0.5, z_exponent=1)(q1),
+                             cirq.PhasedXZGate(axis_phase_exponent=0.5, x_exponent=-0.5, z_exponent=-0.5)(q1),
+                             cirq.PhasedXZGate(axis_phase_exponent=0, x_exponent=0.5, z_exponent=0.5)(q1),
+                             cirq.PhasedXZGate(axis_phase_exponent=0, x_exponent=0, z_exponent=0.5)(q1)]]
+
+
+    def __init__(self):
+        self.generate_symplectic_matrices_R22()
+        return
+
+
+    def generate_symplectic_matrices_R22(self):
+        skew = np.array([[0,1], [1, 0]])
+        all_matrix_space = [np.array(a) for a in product([ar for ar in product([0,1], repeat=2)], repeat=2)]
+        for mat in all_matrix_space:
+            if np.array_equal((mat.T @ skew @ mat) % 2, skew):
+                embedded_mat = np.zeros((4,4))
+                embedded_mat[:2, : 2] = mat
+                SingleQubitSymplacticCompilationData._symplectic_matrices.append(embedded_mat)
+        return
+
+
+    def assemble_data(self):
+        result_container = {'symplectics': self._symplectic_matrices,
+                            'phases': None,
+                            'circuits': self.C1_reduced_q1_XZ,
+                            'unitaries': None}
+
+        return result_container
+
+
 
 
 class RandomizedBenchmarkProgramBuilder:
@@ -119,16 +234,25 @@ class RandomizedBenchmarkProgramBuilder:
         assert num_qubits in [1,2], "Only supports 1 or 2 qubits. "
         self.num_experiments = num_experiments
         self.min_seq_length = min_sequence_length
-        self.symplectic_compilation_data = self.get_clifford_data_pickle()
+        self.symplectic_compilation_data = self.get_cliffords_data()
+        self.paulis_compilation_data = self.get_paulis_data()
         self.__num_phXZ_gates = 0
         self.__num_gates_options = 0
         self.__gate_to_ind_map = {}
         self.__encoded_gates_vals_list = []
         return
 
-    def get_clifford_data_pickle(self):
-        with open("symplectic_compilation_XZ.pkl", 'rb') as f:
-            return pickle.load(f)
+    def get_paulis_data(self):
+        p = Paulis(self.num_qubits)
+        return {'alphas': p.paulis_alpha_vecs,
+                'circuits': p.paulis_circuits}
+
+    def get_cliffords_data(self):
+        if self.num_qubits == 1:
+            return SingleQubitSymplacticCompilationData().assemble_data()
+        else:
+            with open("symplectic_compilation_XZ.pkl", 'rb') as f:
+                return pickle.load(f)
 
     def build_qua_program(self):
         self.py_setup_gates_unique_ids()
@@ -153,17 +277,19 @@ class RandomizedBenchmarkProgramBuilder:
             pauli_rand_ind = declare(int, value=0)
 
             encoded_gates_list = declare(int, value=self.__encoded_gates_vals_list)
-            clifford_decoded_pulse_seq_q0 = declare(int, value=0)
-            clifford_decoded_pulse_seq_q1 = declare(int, value=0)
-            pauli_decoded_pulse_seq_q0 = declare(int, value=0)
-            pauli_decoded_pulse_seq_q1 = declare(int, value=0)
-
             pauli_mat_values_list = declare(int, value=py_pauli_values_list)
-            pauli_pulses_list_q0 = declare(int, value=py_pauli_pulses_list)
-            pauli_pulses_list_q1 = declare(int, value=py_pauli_pulses_list)
+            clifford_decoded_pulse_seq_q0 = declare(int, value=0)
+            pauli_decoded_pulse_seq_q0 = declare(int, value=0)
+            pauli_pulses_list_q0 = declare(int, value=py_pauli_pulses_list[0])
             clifford_mat_values_list = declare(int, value=py_clifford_values_list)
             clifford_pulses_list_q0 = declare(int, value=py_clifford_pulses_list[0])
-            clifford_pulses_list_q1 = declare(int, value=py_clifford_pulses_list[1])
+
+            if self.num_qubits == 2:
+                clifford_decoded_pulse_seq_q1 = declare(int, value=0)
+                pauli_decoded_pulse_seq_q1 = declare(int, value=0)
+                pauli_pulses_list_q1 = declare(int, value=py_pauli_pulses_list[1])
+                clifford_pulses_list_q1 = declare(int, value=py_clifford_pulses_list[1])
+
             inverse_g_ind = declare(int, value=0)
             inverse_alpha_ind = declare(int, value=0)
 
@@ -180,9 +306,10 @@ class RandomizedBenchmarkProgramBuilder:
                     assign(pauli_rand_ind, _rand.rand_int(self._NUM_PAULIS))
                     # Set the pulses to be played
                     assign(clifford_decoded_pulse_seq_q0, clifford_pulses_list_q0[clifford_rand_ind])
-                    assign(clifford_decoded_pulse_seq_q1, clifford_pulses_list_q1[clifford_rand_ind])
                     assign(pauli_decoded_pulse_seq_q0, pauli_pulses_list_q0[pauli_rand_ind])
-                    assign(pauli_decoded_pulse_seq_q1, pauli_pulses_list_q1[pauli_rand_ind])
+                    if self.num_qubits == 2:
+                        assign(clifford_decoded_pulse_seq_q1, clifford_pulses_list_q1[clifford_rand_ind])
+                        assign(pauli_decoded_pulse_seq_q1, pauli_pulses_list_q1[pauli_rand_ind])
                     # Set the current g and alpha
                     assign(current_g, clifford_mat_values_list[clifford_rand_ind])
                     assign(current_alpha, pauli_mat_values_list[pauli_rand_ind])
@@ -204,9 +331,11 @@ class RandomizedBenchmarkProgramBuilder:
                 self.qua_insert_clifford_2_alpha_index(current_alpha, pauli_mat_values_list, inverse_alpha_ind)
 
                 assign(clifford_decoded_pulse_seq_q0, clifford_pulses_list_q0[inverse_g_ind])
-                assign(clifford_decoded_pulse_seq_q1, clifford_pulses_list_q1[inverse_g_ind])
                 assign(pauli_decoded_pulse_seq_q0, pauli_pulses_list_q0[inverse_alpha_ind])
-                assign(pauli_decoded_pulse_seq_q1, pauli_pulses_list_q1[inverse_alpha_ind])
+                if self.num_qubits == 2:
+                    assign(clifford_decoded_pulse_seq_q1, clifford_pulses_list_q1[inverse_g_ind])
+                    assign(pauli_decoded_pulse_seq_q1, pauli_pulses_list_q1[inverse_alpha_ind])
+
                 self.qua_insert_play_circuit(clifford_decoded_pulse_seq_q0, clifford_decoded_pulse_seq_q1,
                                              encoded_gates_list, helpers)
                 self.qua_insert_play_circuit(pauli_decoded_pulse_seq_q0, pauli_decoded_pulse_seq_q1,
@@ -222,15 +351,16 @@ class RandomizedBenchmarkProgramBuilder:
                       (4*helpers.moment_ind_helper)) < self.__num_phXZ_gates):
                 # Current moment is phXZ:
                 # Translate the exponent X2
+                # TODO: Seperate encoded single moment so compiler can parallelize the play to each element.
                 assign(helpers.encoded_single_moment,
                        encoded_values_list[((pulse_seq_q0 & (15 << (4*helpers.moment_ind_helper))) >> (4*helpers.moment_ind_helper))])
                 self.qua_insert_decode_exponents(helpers.encoded_single_moment, helpers)
                 self.qua_insert_play_phased_XZ(helpers.a_exponent, helpers.x_exponent, helpers.z_exponent, 'qubit0')
-
-                assign(helpers.encoded_single_moment,
-                       encoded_values_list[((pulse_seq_q1 & (15 << (4*helpers.moment_ind_helper))) >> (4*helpers.moment_ind_helper))])
-                self.qua_insert_decode_exponents(helpers.encoded_single_moment, helpers)
-                self.qua_insert_play_phased_XZ(helpers.a_exponent, helpers.x_exponent, helpers.z_exponent, 'qubit1')
+                if self.num_qubits == 2:
+                    assign(helpers.encoded_single_moment,
+                           encoded_values_list[((pulse_seq_q1 & (15 << (4*helpers.moment_ind_helper))) >> (4*helpers.moment_ind_helper))])
+                    self.qua_insert_decode_exponents(helpers.encoded_single_moment, helpers)
+                    self.qua_insert_play_phased_XZ(helpers.a_exponent, helpers.x_exponent, helpers.z_exponent, 'qubit1')
             with else_():
                 # Entalgaelemtn
                 self.qua_insert_play_cz()
@@ -279,7 +409,7 @@ class RandomizedBenchmarkProgramBuilder:
         phXZ_options = set()
         non_phXZ_options = set()
         max_momet_len = 0
-        for c in circuits + Paulis.two_qubit_paulis:
+        for c in circuits + self.paulis_compilation_data["circuits"]:
             max_momet_len = max(len(c.moments), max_momet_len)
             for m in c.moments:
                 for o in m.operations:
@@ -318,27 +448,36 @@ class RandomizedBenchmarkProgramBuilder:
         encoded_moments = [int('1'*16, 2)] * self.num_qubits
         for i, moment in enumerate(circuit.moments):
             # resolve the number associated with the current operation
-                for op in moment.operations:
-                    for qubit_num, qubit_op in enumerate(op):
-                        if isinstance(qubit_op, cirq.PhasedXZGate):
-                            gate_to_play_number = self.__gate_to_ind_map[Utils.phXZ_to_tuple(qubit_op)]
-                        elif isinstance(qubit_op, cirq.ISwapPowGate):
-                            gate_to_play_number = self.__gate_to_ind_map[qubit_op]
-                        else:
-                            assert 0
-                        encoded_moments[qubit_num] = encoded_moments[qubit_num] & (gate_to_play_number << (4*i))
+            for op in moment.operations:
+                if len(op.qubits) == 1:
+                    assert (len(op.qubits) == 1)
+                    qubit_num, qubit_op = op.qubits[0].x, op.gate
+                    if isinstance(qubit_op, cirq.PhasedXZGate):
+                        gate_to_play_number = self.__gate_to_ind_map[Utils.phXZ_to_tuple(qubit_op)]
+                    else:
+                        raise NotImplementedError
+                    encoded_moments[qubit_num] = encoded_moments[qubit_num] & (gate_to_play_number << (4 * i))
+                elif len(op.qubits) == self.num_qubits:
+                    if isinstance(op.gate, cirq.ISwapPowGate):
+                        gate_to_play_number = self.__gate_to_ind_map[op.gate]
+                    else:
+                        raise NotImplementedError
+                    for i in range(self.num_qubits):
+                        encoded_moments[i] = encoded_moments[i] & (gate_to_play_number << (4 * i))
+                else:
+                    assert 0, "unsupported"
         return encoded_moments
 
     def py_setup_matrices_and_pulses(self, source_type) -> Tuple[List, List]:
         source_dict_mat_to_pulse = {}
         if source_type == 'pauli':
-            for ind, vec in enumerate(Paulis.two_qubit_paulis):
+            for ind, vec in enumerate(self.paulis_compilation_data["alphas"]):
                 vec_int = Utils.py_bin_vector_to_int32(vec)
-                encoded_circuit = self.py_setup_encode_circuit(Paulis.two_qubit_paulis[ind])
+                encoded_circuit = self.py_setup_encode_circuit(self.paulis_compilation_data["circuits"][ind])
                 source_dict_mat_to_pulse[vec_int] = encoded_circuit
         else:
-            for ind, mat in enumerate(self.symplectic_compilation_data["symplectic"]):
-                mat_int = Utils.py_bin_matrix_to_int32(mat)
+            for ind, mat in enumerate(self.symplectic_compilation_data["symplectics"]):
+                mat_int = Utils.py_bin_matrix_to_int32(mat.astype(int))
                 encoded_circuit = self.py_setup_encode_circuit(self.symplectic_compilation_data["circuits"][ind])
                 source_dict_mat_to_pulse[mat_int] = encoded_circuit
 
@@ -466,8 +605,8 @@ def check_axz(cirucuits):
 
 
 if __name__ == '__main__':
-    rb = RandomizedBenchmarkProgramBuilder(1, 2)
-    # rb.build_qua_program()
+    rb = RandomizedBenchmarkProgramBuilder(1, 1)
+    rb.build_qua_program()
     # rb.py_setup_gates_unique_ids()
     # rb.py_setup_translation_to_gate()
     # tester = Test()
