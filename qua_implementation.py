@@ -3,7 +3,7 @@ observations:
 time to randomize a number between 0 and 719 is about 240 nsec.
 """
 import pickle
-from itertools import combinations, product
+from itertools import product
 
 import cirq
 from qm import SimulationConfig
@@ -12,7 +12,7 @@ from qm.QuantumMachinesManager import QuantumMachinesManager
 from qm.simulate.credentials import create_credentials
 from matplotlib import pyplot as plt
 
-from configuration import config
+from archive.configuration import config
 
 cirq_qua_map = {
     cirq.LineQubit(0): "qe1",

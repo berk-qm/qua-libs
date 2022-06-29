@@ -3,14 +3,10 @@ from typing import Union, List, Dict
 import qua_simple_tableau as qst
 from qm.QuantumMachinesManager import QuantumMachinesManager, SimulationConfig
 from qm.qua import *
-import matplotlib.pyplot as plt
-from qm import LoopbackInterface
-import numpy as np
-from configuration import *
-from qm.simulate.credentials import create_credentials  # only when simulating
+from archive.configuration import *
 import simple_tableau
 from colorama import Fore
-
+from archive import TwoQubitRB
 
 LUT_4BIT_ADD_TO_MOD = [bin(i).strip("0b").count("1") % 2 for i in range(16)]
 
@@ -181,11 +177,12 @@ class TestQUASimpleTableau:
         m1_int = self.matrix_to_int32(m1)
         m2_int = self.matrix_to_int32(m2)
         with program() as p:
+            helpers = TwoQubitRB.RandomizedBenchmarkProgramBuilder.QuaThenHelpers()
             self._insert_start_ts()
             _m1 = declare(int, value=m1_int)
             _m2 = declare(int, value=m2_int)
             res = declare(int, value=0)
-            qst.qua_mat_mul_over_z2(_m1, _m2, res)
+            qst.qua_mat_mul_over_z2(_m1, _m2, res, helpers.product_lut, helpers.row_mask, helpers.m2_transposed)
             save(res, "res")
 
         sim_res = self.run_qmm_simulation(p, "res")
@@ -389,13 +386,15 @@ class TestQUASimpleTableau:
         alpha2_int = self.array_to_int32(alpha2)
 
         with program() as p:
-            self._insert_start_ts()
+            helpers = TwoQubitRB.RandomizedBenchmarkProgramBuilder.QuaThenHelpers()
             _g1 = declare(int, value=g1_int)
             _g2 = declare(int, value=g2_int)
             _alpha1 = declare(int, value=alpha1_int)
             _alpha2 = declare(int, value=alpha2_int)
             a12_res = declare(int, value=0)
-            qst.qua_compose_alpha(_g1, _alpha1, _g2, _alpha2, a12_res)
+            self._insert_start_ts()
+            qst.qua_compose_alpha(_g1, _alpha1, _g2, _alpha2, a12_res, helpers.temp_bi, helpers.two_alpha_21,
+                                  helpers.g1_ith_col, helpers.temp_g1_dot_alpha2, helpers.beta_lut)
             save(a12_res, f"a12_res")
 
         compose_alpha_qua = self.run_qmm_simulation(p, "a12_res")
@@ -426,12 +425,14 @@ class TestQUASimpleTableau:
         g_int = self.matrix_to_int32(g)
         alpha_int = self.array_to_int32(alpha)
         with program() as p:
+            helpers = TwoQubitRB.RandomizedBenchmarkProgramBuilder.QuaInverseHelpers()
             self._insert_start_ts()
             g_qua = declare(int, value=g_int)
             alpha_qua = declare(int, value=alpha_int)
             g_res = declare(int, value=0)
             alpha_res = declare(int, value=0)
-            qst.inverse(g_qua, alpha_qua, g_res, alpha_res)
+            lamd = declare(int, value=0) #TODO
+            qst.inverse(g_qua, alpha_qua, g_res, alpha_res, lamd, helpers)
             save(g_res, "g_inv_res")
             save(alpha_res, "alpha_inv_res")
 
@@ -462,6 +463,8 @@ class TestQUASimpleTableau:
         c1_int = self.matrix_to_int32(c1)
         c2_int = self.matrix_to_int32(c2)
         with program() as p:
+            then_helpers = TwoQubitRB.RandomizedBenchmarkProgramBuilder.QuaThenHelpers()
+            helpers = TwoQubitRB.RandomizedBenchmarkProgramBuilder.QuaHelpers()
             self._insert_start_ts()
             g1_qua = declare(int, value=c1_int & int('1'*16, 2))
             alpha1_qua = declare(int, value=c1_int & (int('1111', 2) << 16))
@@ -469,7 +472,7 @@ class TestQUASimpleTableau:
             alpha2_qua = declare(int, value=c2_int & (int('1111', 2) << 16))
             g12_res = declare(int, value=0)
             alpha12_res = declare(int, value=0)
-            qst.then(g1_qua, alpha1_qua, g2_qua, alpha2_qua, g12_res, alpha12_res)
+            qst.then(g1_qua, alpha1_qua, g2_qua, alpha2_qua, g12_res, alpha12_res, then_helpers)
             save(g12_res, "g12_res")
             save(alpha12_res, "alpha12_res")
 
@@ -493,12 +496,14 @@ class TestQUASimpleTableau:
             alpha2 = np.random.randint(0, 2, [4, ]).tolist() if _c2 is None else _c2[-1]
             c2 = np.vstack((g2, alpha2))
             sim_result, ref_tableau = self.run_then_calc(c1, c2)
-            if np.array_equal(self.int32_to_bin_mat(sim_result["g12_res"][0]), ref_tableau.g) and \
-                    np.array_equal(self.int32_to_bin_arr(sim_result["alpha12_res"][0]), ref_tableau.alpha):
+            g12_sim_res =self.int32_to_bin_mat(sim_result["g12_res"][0])
+            alpha12_sim_res = self.int32_to_bin_arr(sim_result["alpha12_res"][0])
+            if np.array_equal(g12_sim_res, ref_tableau.g) and np.array_equal(alpha12_sim_res, ref_tableau.alpha):
                 report.increase_num_passed()
                 report.add_to_cumtime(sim_result, "alpha12_res")
             else:
-                report.add_to_failed_tracker(f' {c1=} \n {c2=}')
+                report.add_to_failed_tracker(f' {c1=} \n {c2=} \n {g12_sim_res=} \n {alpha12_sim_res=} '
+                                             f'\n {ref_tableau.g=} \n {ref_tableau.alpha=}')
         return report
 
     @test_reporter
@@ -522,8 +527,14 @@ class TestQUASimpleTableau:
 
 if __name__ == '__main__':
     tester = TestQUASimpleTableau(2)
-    tester.test_inverse(num_to_run=1)
-    tester.test_then(num_to_run=1)
+    tester.test_compose_alpha(num_to_run=10)
+    # tester.test_bin_matmul(num_to_run=10)
+    exit()
+    res = tester.test_then(num_to_run=1)
+    print(res.failed_tracker[0])
+    # tester.test_inverse(num_to_run=1)
+
+    exit()
 
 
 

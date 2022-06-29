@@ -4,6 +4,7 @@ from itertools import combinations, product
 from typing import Tuple, List, Dict
 import numpy as np
 import random
+import matplotlib.pyplot as pplot
 
 import cirq
 from qm import SimulationConfig
@@ -158,13 +159,14 @@ class SingleQubitSymplacticCompilationData:
         '-SX': (np.array([[1, 1], [0, 1]]), np.array([0, 0])),
     }
     q1 = cirq.LineQubit(0)
-    C1_reduced_q1_XZ = [cirq.Circuit(g) for g in [cirq.PhasedXZGate(axis_phase_exponent=0, x_exponent=0, z_exponent=0)(q1),
-                             cirq.PhasedXZGate(axis_phase_exponent=0, x_exponent=-0.5, z_exponent=0)(q1),
-                             cirq.PhasedXZGate(axis_phase_exponent=0.5, x_exponent=-0.5, z_exponent=1)(q1),
-                             cirq.PhasedXZGate(axis_phase_exponent=0.5, x_exponent=-0.5, z_exponent=-0.5)(q1),
-                             cirq.PhasedXZGate(axis_phase_exponent=0, x_exponent=0.5, z_exponent=0.5)(q1),
-                             cirq.PhasedXZGate(axis_phase_exponent=0, x_exponent=0, z_exponent=0.5)(q1)]]
-
+    C1_reduced_q1_XZ = [cirq.Circuit(g) for g in
+                        [cirq.PhasedXZGate(axis_phase_exponent=0, x_exponent=0, z_exponent=0)(q1),
+                         cirq.PhasedXZGate(axis_phase_exponent=0, x_exponent=-0.5, z_exponent=0)(q1),
+                         cirq.PhasedXZGate(axis_phase_exponent=0.5, x_exponent=-0.5, z_exponent=1)(q1),
+                         cirq.PhasedXZGate(axis_phase_exponent=0.5, x_exponent=-0.5, z_exponent=-0.5)(q1),
+                         cirq.PhasedXZGate(axis_phase_exponent=0, x_exponent=0.5, z_exponent=0.5)(q1),
+                         cirq.PhasedXZGate(axis_phase_exponent=0, x_exponent=0, z_exponent=0.5)(q1)]
+                        ]
 
     def __init__(self):
         self.generate_symplectic_matrices_R22()
@@ -215,25 +217,47 @@ class RandomizedBenchmarkProgramBuilder:
     '''
 
     class QuaHelpers:
-
         def __init__(self):
             self.a_exponent = declare(fixed, value=0)
             self.x_exponent = declare(fixed, value=0)
             self.z_exponent = declare(fixed, value=0)
             self.moment_ind_helper = declare(int, value=0)
             self.encoded_single_moment = declare(int, value=0)
+            self.beta_lut = declare(int, value=[0, 0, 0, 0, 0, 0, 3, 1, 0, 1, 0, 3, 0, 3, 1, 0])
+            self.product_lut = declare(int, value=[0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0])
+            self.row_mask = declare(int, value=int(b'1111', 2))
+            self.m2_transposed = declare(int, value=0)
+            self.temp_bi = declare(int, value=0)
 
+    class QuaThenHelpers(QuaHelpers):
+        def __init__(self):
+            super(RandomizedBenchmarkProgramBuilder.QuaThenHelpers, self).__init__()
+            self.two_alpha_21 = declare(int, value=[0, 0, 0, 0])
+            self.g1_ith_col = declare(int, value=0)
+            self.temp_g1_dot_alpha2 = declare(int, value=0)
+
+    class QuaInverseHelpers(QuaHelpers):
+        def __init__(self):
+            super(RandomizedBenchmarkProgramBuilder.QuaInverseHelpers, self).__init__()
+            self.b = declare(int, value=[0, 0, 0, 0])
+            self.temp_res_inv_a = declare(int, value=[0, 0, 0, 0])
+            self.inv_g1_transpose = declare(int, value=0)
+            self.temp_2alpha_plus_b = declare(int, value=[0, 0, 0, 0])
 
     _CLIFFORD_G_MASK = int('1'*16, 2)
     _CLIFFORD_ALPHA_MASK = int('1'*4, 2) << 16
     _NUM_CLIFFORDS = 720
     _NUM_PAULIS = 16
 
-    def __init__(self, num_experiments, num_qubits,  min_sequence_length=1):
+    def __init__(self, num_experiments, num_qubits,  min_sequence_length=1, max_sequence_length=None):
         self.num_qubits = num_qubits
         assert num_qubits in [1,2], "Only supports 1 or 2 qubits. "
+        if num_qubits == 1:
+            self._NUM_PAULIS = 4
+            self._NUM_CLIFFORDS = 6
         self.num_experiments = num_experiments
         self.min_seq_length = min_sequence_length
+        self.max_sequence_length = self._NUM_CLIFFORDS if max_sequence_length is None else min(max_sequence_length, self._NUM_CLIFFORDS)
         self.symplectic_compilation_data = self.get_cliffords_data()
         self.paulis_compilation_data = self.get_paulis_data()
         self.__num_phXZ_gates = 0
@@ -251,7 +275,7 @@ class RandomizedBenchmarkProgramBuilder:
         if self.num_qubits == 1:
             return SingleQubitSymplacticCompilationData().assemble_data()
         else:
-            with open("symplectic_compilation_XZ.pkl", 'rb') as f:
+            with open("../symplectic_compilation_XZ.pkl", 'rb') as f:
                 return pickle.load(f)
 
     def build_qua_program(self):
@@ -261,6 +285,8 @@ class RandomizedBenchmarkProgramBuilder:
 
         with program() as rb_program:
             helpers = self.QuaHelpers()
+            then_helpers = self.QuaThenHelpers()
+            inv_helpers = self.QuaInverseHelpers()
             _rand = Random()
             experiment_ind = declare(int, value=0)
             experiment_length = declare(int, value=0)
@@ -273,6 +299,7 @@ class RandomizedBenchmarkProgramBuilder:
             g12_temp_res = declare(int, value=0)
             alpha12_temp_res = declare(int, value=0)
 
+            lamb = declare(int, value=18450)
             clifford_rand_ind = declare(int, value=0)
             pauli_rand_ind = declare(int, value=0)
 
@@ -284,6 +311,8 @@ class RandomizedBenchmarkProgramBuilder:
             clifford_mat_values_list = declare(int, value=py_clifford_values_list)
             clifford_pulses_list_q0 = declare(int, value=py_clifford_pulses_list[0])
 
+            clifford_decoded_pulse_seq_q1 = None
+            pauli_decoded_pulse_seq_q1 = None
             if self.num_qubits == 2:
                 clifford_decoded_pulse_seq_q1 = declare(int, value=0)
                 pauli_decoded_pulse_seq_q1 = declare(int, value=0)
@@ -296,14 +325,16 @@ class RandomizedBenchmarkProgramBuilder:
             with for_(experiment_ind, cond=(experiment_ind < self.num_experiments), update=(experiment_ind+1)):
                 # run the experiment several times
                 assign(experiment_length,
-                       _rand.rand_int(self._NUM_CLIFFORDS - self.min_seq_length) + self.min_seq_length)
-
+                       _rand.rand_int(self.max_sequence_length - self.min_seq_length) + self.min_seq_length)
+                save(experiment_length, 'exp_length')
                 with for_(current_clifford_ind, init=0, cond=(current_clifford_ind < experiment_length),
                           update=(current_clifford_ind+1)):
                     # Loop to play clifford pulses
                     # Get random indices
-                    assign(clifford_rand_ind, _rand.rand_int(self._NUM_CLIFFORDS))
-                    assign(pauli_rand_ind, _rand.rand_int(self._NUM_PAULIS))
+                    # assign(clifford_rand_ind, _rand.rand_int(self._NUM_CLIFFORDS))
+                    assign(clifford_rand_ind, current_clifford_ind)
+                    # assign(pauli_rand_ind, _rand.rand_int(self._NUM_PAULIS))
+                    assign(pauli_rand_ind, 1)
                     # Set the pulses to be played
                     assign(clifford_decoded_pulse_seq_q0, clifford_pulses_list_q0[clifford_rand_ind])
                     assign(pauli_decoded_pulse_seq_q0, pauli_pulses_list_q0[pauli_rand_ind])
@@ -313,22 +344,22 @@ class RandomizedBenchmarkProgramBuilder:
                     # Set the current g and alpha
                     assign(current_g, clifford_mat_values_list[clifford_rand_ind])
                     assign(current_alpha, pauli_mat_values_list[pauli_rand_ind])
-                    # Insert play
+                    # -Insert play
                     self.qua_insert_play_circuit(clifford_decoded_pulse_seq_q0, clifford_decoded_pulse_seq_q1,
                                                  encoded_gates_list, helpers)
                     self.qua_insert_play_circuit(pauli_decoded_pulse_seq_q0, pauli_decoded_pulse_seq_q1,
                                                  encoded_gates_list, helpers)
-                    # Multiply
+                    # -Multiply
                     qua_simple_tableau.then(current_g, current_alpha, prev_g, prev_alpha,
-                                            g12_temp_res, alpha12_temp_res)
+                                            g12_temp_res, alpha12_temp_res, then_helpers)
                     assign(prev_g, current_g)
                     assign(prev_alpha, current_alpha)
                     assign(current_g, g12_temp_res)
                     assign(current_alpha, alpha12_temp_res)
 
-                qua_simple_tableau.inverse(current_g, current_alpha, current_g, current_alpha)
-                self.qua_insert_clifford_2_g_index(current_g, clifford_mat_values_list, inverse_g_ind)
-                self.qua_insert_clifford_2_alpha_index(current_alpha, pauli_mat_values_list, inverse_alpha_ind)
+                qua_simple_tableau.inverse(current_g, current_alpha, prev_g, prev_alpha, lamb, inv_helpers)
+                self.qua_insert_clifford_2_g_index(prev_g, clifford_mat_values_list, inverse_g_ind)
+                self.qua_insert_clifford_2_alpha_index(prev_alpha, pauli_mat_values_list, inverse_alpha_ind)
 
                 assign(clifford_decoded_pulse_seq_q0, clifford_pulses_list_q0[inverse_g_ind])
                 assign(pauli_decoded_pulse_seq_q0, pauli_pulses_list_q0[inverse_alpha_ind])
@@ -341,20 +372,25 @@ class RandomizedBenchmarkProgramBuilder:
                 self.qua_insert_play_circuit(pauli_decoded_pulse_seq_q0, pauli_decoded_pulse_seq_q1,
                                              encoded_gates_list, helpers)
 
+                save(clifford_decoded_pulse_seq_q0, "c")
+
         return rb_program
 
     def qua_insert_play_circuit(self, pulse_seq_q0, pulse_seq_q1, encoded_values_list, helpers: QuaHelpers):
         # Decode the pulses (moments)
         assign(helpers.moment_ind_helper, 0)
-        with while_(((pulse_seq_q0 & (15 << (4*helpers.moment_ind_helper))) >> (4*helpers.moment_ind_helper)) < 15):
+        save(pulse_seq_q0, "pulse_seq_q0")
+        with while_((((pulse_seq_q0 & (15 << (4*helpers.moment_ind_helper))) >> (4*helpers.moment_ind_helper)) < 15)):
             with if_(((pulse_seq_q0 & (15 << (4*helpers.moment_ind_helper))) >>
                       (4*helpers.moment_ind_helper)) < self.__num_phXZ_gates):
-                # Current moment is phXZ:
-                # Translate the exponent X2
-                # TODO: Seperate encoded single moment so compiler can parallelize the play to each element.
+            # Current moment is phXZ:
+            # Translate the exponent X2
+            # TODO: Seperate encoded single moment so compiler can parallelize the play to each element.
                 assign(helpers.encoded_single_moment,
                        encoded_values_list[((pulse_seq_q0 & (15 << (4*helpers.moment_ind_helper))) >> (4*helpers.moment_ind_helper))])
+                # save(helpers.encoded_single_moment, "encoded_single_moment")
                 self.qua_insert_decode_exponents(helpers.encoded_single_moment, helpers)
+                # save(helpers.x_exponent, "x_exponent")
                 self.qua_insert_play_phased_XZ(helpers.a_exponent, helpers.x_exponent, helpers.z_exponent, 'qubit0')
                 if self.num_qubits == 2:
                     assign(helpers.encoded_single_moment,
@@ -363,7 +399,10 @@ class RandomizedBenchmarkProgramBuilder:
                     self.qua_insert_play_phased_XZ(helpers.a_exponent, helpers.x_exponent, helpers.z_exponent, 'qubit1')
             with else_():
                 # Entalgaelemtn
-                self.qua_insert_play_cz()
+                save(helpers.a_exponent, "cz_else")
+                # self.qua_insert_play_cz()
+            assign(helpers.moment_ind_helper, helpers.moment_ind_helper + 1)
+        save(helpers.moment_ind_helper, "moment_ind")
 
     def qua_insert_play_phased_XZ(self, a,x,z, elem):
         frame_rotation_2pi(a / 2, elem)
@@ -372,7 +411,8 @@ class RandomizedBenchmarkProgramBuilder:
         frame_rotation_2pi(z, elem)
 
     def qua_insert_play_cz(self):
-        play('flux_pulse', 'coupler_element') # TODO
+        # play('flux_pulse', 'coupler_element') # TODO
+        play('pi', 'qe2') # TODO
 
     def qua_insert_clifford_2_g_index(self, c, clifford_vals_list, ind_res):
         Utils.qua_add_binary_search_block(c,clifford_vals_list , self._NUM_CLIFFORDS, ind_res)
@@ -383,13 +423,13 @@ class RandomizedBenchmarkProgramBuilder:
     def qua_insert_decode_exponents(self, encoded_single_moment, qua_helper: QuaHelpers):
         ''' encoded_single_moment - qua int with exponent params encoded inside.
          '''
-        assign(qua_helper.a_exponent, (1 - (2*Utils.bitN(encoded_single_moment, 3))) * Cast.unsafe_cast_fixed(
+        assign(qua_helper.a_exponent, (1 - Cast.to_fixed((2*Utils.bitN(encoded_single_moment, 3)))) * Cast.unsafe_cast_fixed(
                                             ((Utils.bitN(encoded_single_moment, 1)) << 28) |
                                             (Utils.bitN(encoded_single_moment, 0) << 27)))
-        assign(qua_helper.x_exponent, (1 - (2*Utils.bitN(encoded_single_moment, 7))) * Cast.unsafe_cast_fixed(
+        assign(qua_helper.x_exponent, (1 - Cast.to_fixed((2*Utils.bitN(encoded_single_moment, 7)))) * Cast.unsafe_cast_fixed(
                                             ((Utils.bitN(encoded_single_moment, 5)) << 28) |
                                             (Utils.bitN(encoded_single_moment, 4) << 27)))
-        assign(qua_helper.z_exponent, (1 - (2*Utils.bitN(encoded_single_moment, 11))) * Cast.unsafe_cast_fixed(
+        assign(qua_helper.z_exponent, (1 - Cast.to_fixed((2*Utils.bitN(encoded_single_moment, 11)))) * Cast.unsafe_cast_fixed(
                                             ((Utils.bitN(encoded_single_moment, 9)) << 28) |
                                             (Utils.bitN(encoded_single_moment, 8) << 27)))
 
@@ -445,7 +485,8 @@ class RandomizedBenchmarkProgramBuilder:
     def py_setup_encode_circuit(self, circuit) -> int:
         ''' Takes a ciruit and encode it to integer/s. (All the moments and pulses).
             return: int '''
-        encoded_moments = [int('1'*16, 2)] * self.num_qubits
+        _int_max = int('1'*32, 2)
+        encoded_moments = [_int_max] * self.num_qubits
         for i, moment in enumerate(circuit.moments):
             # resolve the number associated with the current operation
             for op in moment.operations:
@@ -456,7 +497,8 @@ class RandomizedBenchmarkProgramBuilder:
                         gate_to_play_number = self.__gate_to_ind_map[Utils.phXZ_to_tuple(qubit_op)]
                     else:
                         raise NotImplementedError
-                    encoded_moments[qubit_num] = encoded_moments[qubit_num] & (gate_to_play_number << (4 * i))
+                    encoded_moments[qubit_num] = encoded_moments[qubit_num] & \
+                                                 ((~(((~gate_to_play_number) & 15) << (4 * i))) & _int_max)
                 elif len(op.qubits) == self.num_qubits:
                     if isinstance(op.gate, cirq.ISwapPowGate):
                         gate_to_play_number = self.__gate_to_ind_map[op.gate]
@@ -466,7 +508,14 @@ class RandomizedBenchmarkProgramBuilder:
                         encoded_moments[i] = encoded_moments[i] & (gate_to_play_number << (4 * i))
                 else:
                     assert 0, "unsupported"
-        return encoded_moments
+
+        encoded_moment_reg = []
+        for m in encoded_moments:
+            if 0 <= m <= 2**31 -1:
+                encoded_moment_reg.append(m)
+            else:
+                encoded_moment_reg.append((m & 2**31-1) - 2**31)
+        return encoded_moment_reg
 
     def py_setup_matrices_and_pulses(self, source_type) -> Tuple[List, List]:
         source_dict_mat_to_pulse = {}
@@ -481,11 +530,13 @@ class RandomizedBenchmarkProgramBuilder:
                 encoded_circuit = self.py_setup_encode_circuit(self.symplectic_compilation_data["circuits"][ind])
                 source_dict_mat_to_pulse[mat_int] = encoded_circuit
 
-        pulses_list = []
+        pulses_list = [[]] * self.num_qubits
         values_list = sorted(list(source_dict_mat_to_pulse.keys()))
 
         for mat in values_list:
-            pulses_list.append(source_dict_mat_to_pulse[mat])
+            pulses_list[0].append(source_dict_mat_to_pulse[mat][0])
+            if self.num_qubits == 2:
+                pulses_list[1].append(source_dict_mat_to_pulse[mat][1])
 
         return values_list, pulses_list
 
@@ -499,10 +550,12 @@ class Test:
         return
 
     def run_simulation(self, _program, vars_to_save):
-        job_sim = self.qmm.simulate(config, _program, SimulationConfig(100000))
+        job_sim = self.qmm.simulate(config, _program, SimulationConfig(10000))
         res = job_sim.result_handles
         while not res.wait_for_all_values():
             pass
+        job_sim.get_simulated_samples().con1.plot()
+        pplot.show()
         if isinstance(vars_to_save, list):
             final_res = {var_name: res.__getattribute__(var_name).fetch_all() for var_name in vars_to_save}
         elif isinstance(vars_to_save, str):
@@ -571,50 +624,28 @@ class Test:
         return
 
 
-
-
-
-
-
-
-
-def check_axz(cirucuits):
-    a = set()
-    x = set()
-    z = set()
-    options = set()
-    max_momet_len = 0
-    for c in cirucuits:
-        max_momet_len = max(len(c.moments), max_momet_len)
-        for m in c.moments:
-            for o in m.operations:
-                if isinstance(o.gate, cirq.PhasedXZGate):
-                    a.add(o.gate.axis_phase_exponent)
-                    x.add(o.gate.x_exponent)
-                    z.add(o.gate.z_exponent)
-                    options.add((o.gate.axis_phase_exponent, o.gate.x_exponent, o.gate.z_exponent))
-                else:
-                    print(o.gate)
-    print(a)
-    print(x)
-    print(z)
-    print(len(options))
-    print(options)
-    print(max_momet_len)
-
+def run_experiment(num_qubits, num_experiments=1, min_sequence_length=1, max_sequence_length=None):
+    rb = RandomizedBenchmarkProgramBuilder(num_experiments=num_experiments, num_qubits=num_qubits,
+                                           min_sequence_length=min_sequence_length,
+                                           max_sequence_length=max_sequence_length)
+    p = rb.build_qua_program()
+    tester = Test()
+    d =tester.run_simulation(p, ['exp_length', 'pulse_seq_q0', "moment_ind", "c"])
+    for k,v in d.items():
+        print(f"{k:<20}, {[i for i in v]}")
 
 
 if __name__ == '__main__':
-    rb = RandomizedBenchmarkProgramBuilder(1, 1)
-    rb.build_qua_program()
+    run_experiment(1,1, 6, 7)
+
     # rb.py_setup_gates_unique_ids()
     # rb.py_setup_translation_to_gate()
     # tester = Test()
     # tester.test_general()
     # tester.test_binary_search()
     # import pickle
-    with open("symplectic_compilation_XZ.pkl", 'rb') as f:
-        s = pickle.load(f)
-    print()
+    # with open("symplectic_compilation_XZ.pkl", 'rb') as f:
+    #     s = pickle.load(f)
+    # print()
     # check_axz(s["circuits"])
     # print()

@@ -1,10 +1,4 @@
-from qm.QuantumMachinesManager import QuantumMachinesManager, SimulationConfig
 from qm.qua import *
-import matplotlib.pyplot as plt
-from qm import LoopbackInterface
-import numpy as np
-from configuration import *
-from qm.simulate.credentials import create_credentials # only when simulating
 
 
 def mat_mul_qua(m1, m2, m3):
