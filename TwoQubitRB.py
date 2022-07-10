@@ -1,9 +1,9 @@
-import functools
-import math
+import itertools
 import pickle
 from itertools import combinations, product
 from typing import Tuple, List, Dict
 import numpy as np
+import time
 import random
 import matplotlib.pyplot as pplot
 
@@ -63,15 +63,6 @@ class Utils:
 
 
 class Paulis:
-    # identity = np.identity(2, dtype=np.int)
-    # sigma_x = np.array([[0,1], [1,0]])
-    # sigma_y = np.array([[0, -1],[1,0]])
-    # sigma_z = np.array([[1,0], [0,-1]])
-    # all_vals = []
-    #
-    # for comb in product([sigma_x, sigma_z, sigma_y, identity], repeat=2):
-    #     all_vals.append(np.kron(comb[0], comb[1]))
-
     pauli_I = cirq.PhasedXZGate(x_exponent=0, z_exponent=0, axis_phase_exponent=0)
     pauli_X = cirq.PhasedXZGate(x_exponent=1, z_exponent=0, axis_phase_exponent=0)
     pauli_Z = cirq.PhasedXZGate(x_exponent=0, z_exponent=1, axis_phase_exponent=0)
@@ -101,48 +92,6 @@ class Paulis:
 
 
 class SingleQubitSymplacticCompilationData:
-    _c1_ops = [
-        ('I',),  # XZ ++
-        ('X',),  # XZ +-
-        ('Z',),  # XZ -+
-        ('Y',),  # XZ --
-
-        ('-SX',),  # XY ++
-        ('SX',),  # XY +-
-        ('Y', 'SX'),  # XY -+
-        ('Y', '-SX'),  # XY --
-
-        ('X', '-SY'),  # ZX ++
-        ('-SY',),  # ZX +-
-        ('SY',),  # ZX -+
-        ('X', 'SY'),  # ZX --
-
-        ('-SX', '-SY'),  # ZY ++
-        ('SX', '-SY'),  # ZY +-
-        ('-SX', 'SY'),  # ZY -+
-        ('SX', 'SY'),  # ZY --
-
-        ('SY', 'SX'),  # YX ++
-        ('-SY', '-SX'),  # YX +-
-        ('SY', '-SX'),  # YX -+
-        ('-SY', 'SX'),  # YX --
-
-        ('-SX', 'SY', 'SX'),  # YZ ++
-        ('SX', 'SY', 'SX'),  # YZ +-
-        ('-SX', '-SY', 'SX'),  # YZ -+
-        ('-SX', 'SY', '-SX'),  # YZ --
-    ]
-
-    _gate_from_op = {
-        'I': cirq.I,
-        'X': cirq.X,
-        'Y': cirq.Y,
-        'Z': cirq.Z,
-        'SX': cirq.X ** 0.5,
-        'SY': cirq.Y ** 0.5,
-        '-SX': cirq.X ** -0.5,
-        '-SY': cirq.Y ** -0.5,
-    }
 
     _symplectic_matrices_reduced = []
     _symplectic_matrices = []
@@ -159,6 +108,7 @@ class SingleQubitSymplacticCompilationData:
         '-SY': (np.array([[0, 1], [1, 0]]), np.array([0, 1])),
         '-SX': (np.array([[1, 1], [0, 1]]), np.array([0, 0])),
     }
+
     q1 = cirq.LineQubit(0)
     C1_reduced_q1_XZ = [cirq.Circuit(g) for g in
                         [cirq.PhasedXZGate(axis_phase_exponent=0, x_exponent=0, z_exponent=0)(q1),
@@ -173,7 +123,6 @@ class SingleQubitSymplacticCompilationData:
         self.generate_symplectic_matrices_R22()
         return
 
-
     def generate_symplectic_matrices_R22(self):
         skew = np.array([[0,1], [1, 0]])
         all_matrix_space = [np.array(a) for a in product([ar for ar in product([0,1], repeat=2)], repeat=2)]
@@ -184,38 +133,17 @@ class SingleQubitSymplacticCompilationData:
                 SingleQubitSymplacticCompilationData._symplectic_matrices.append(embedded_mat)
         return
 
-
     def assemble_data(self):
         result_container = {'symplectics': self._symplectic_matrices,
                             'phases': None,
                             'circuits': self.C1_reduced_q1_XZ,
                             'unitaries': None}
-
         return result_container
 
 
 
 
 class RandomizedBenchmarkProgramBuilder:
-    '''
-    Terminology:
-        Ciruits -   Describes the whole system (all qubits) gates at all the times.
-        Moment -    A point at time of operations on all qubits
-        Operation - A gate played on single time on single qubit.
-        Gate -      A combination of pulses creating some logical gate.
-
-    How circuits are stored:
-        - Each operation has unique id. (for now, number of operation must be <=15. It can be extended, but thats not
-            supported now).
-        - Per Qubit:
-            - All single circuits moments (of qubit) are stored in a single integer (number of moments should be <=8.
-                this is also can be extended, but not supported now).
-            - Each 4 bit is a moment. The number corresponds to the operation unique id.
-            - For decoding - take the 4 bit, translate them to the operation -> if operation is phased Xz, it is also
-                stored inside single int represeting all the exponents.
-                otherwise -> It is ISWAP so play ISWAP.
-
-    '''
 
     class QuaHelpers:
         def __init__(self):
@@ -240,15 +168,25 @@ class RandomizedBenchmarkProgramBuilder:
             self.inv_g1_transpose = declare(int, value=0)
             self.temp_2alpha_plus_b = declare(int, value=[0, 0, 0, 0])
 
-    _NUM_CLIFFORDS = 60
-    _NUM_PAULIS = 16
-    _CLASS_C1_SIZE = 6
-    _CLASS_CNOT_SIZE = 24
-    _CLASS_SWAP_SIZE = 24
-    _CLASS_ISWAP_SIZE = 6
+    _NUM_PAULIS_SINGLE = 4
+    _NUM_PAULIS = _NUM_PAULIS_SINGLE ** 2
+    _CLASS_C1_SIZE_SINGLE = 3
+    _CLASS_C1_SIZE = _CLASS_C1_SIZE_SINGLE ** 2
+    _CLASS_CNOT_SIZE_SINGLE = 5
+    _CLASS_CNOT_SIZE = _CLASS_CNOT_SIZE_SINGLE ** 2
+    _CLASS_SWAP_SIZE_SINGLE = 5
+    _CLASS_SWAP_SIZE = _CLASS_SWAP_SIZE_SINGLE ** 2
+    _CLASS_ISWAP_SIZE_SINGLE = 3
+    _CLASS_ISWAP_SIZE = _CLASS_ISWAP_SIZE_SINGLE ** 2
+
+    _NUM_CLIFFORDS = _CLASS_CNOT_SIZE + _CLASS_C1_SIZE + _CLASS_ISWAP_SIZE + _CLASS_SWAP_SIZE
+
+    _AMPLITUDE_SET_DELAY = 36 # (4 dispatch + 5 read from memory = 9 cycles)
+    _AMPLITUDE_TRACK_DELAY = 12
+    _JUMP_BETWEEN_CASES_DELAY = 36
 
     def __init__(self, config_builder: conf.ConfigBuilder, num_experiments, num_qubits, bake_cnot=True, bake_swap=True,
-                 min_sequence_length=1, max_sequence_length=None):
+                 min_sequence_length=1, max_sequence_length=None, from_initilized_list=False):
         self.num_qubits = num_qubits
         assert num_qubits in [1,2], "Only supports 1 or 2 qubits. "
         if num_qubits == 1:
@@ -262,6 +200,7 @@ class RandomizedBenchmarkProgramBuilder:
         self.max_sequence_length = self._NUM_CLIFFORDS if max_sequence_length is None else min(max_sequence_length, self._NUM_CLIFFORDS)
         self.symplectic_compilation_data = self.get_cliffords_data()
         self.paulis_compilation_data = self.get_paulis_data()
+        self.from_initilized_list = from_initilized_list
         return
 
     def resolve_elem(self, qubit_num, channel, pulser):
@@ -286,12 +225,19 @@ class RandomizedBenchmarkProgramBuilder:
         py_clifford_values_list = self.py_setup_matrices_and_pulses("clifford")
         m = self.config_builder.pulsers_per_qubit
         with program() as rb_program:
-            Q = declare(fixed)
-            I = declare(fixed)
+            I_0 = declare(fixed)
+            I_1 = declare(fixed)
+            Q_0 = declare(fixed)
+            Q_1 = declare(fixed)
             then_helpers = [self.QuaThenHelpers() for i in range(m)]
             inv_helpers = [self.QuaInverseHelpers() for _ in range(m)]
-            _rand = [Random() for _ in range(m)]
-            random_tracker = [declare(int, value=[7, 46,] * 4 + [0] * 733 * 2) for _ in range(m)]
+            _rand = [Random(0) for _ in range(m)]
+            random_tracker = [declare(int, value=[self._CLASS_C1_SIZE + 5, 10 + self._NUM_CLIFFORDS] * 20 + [0] * (736-20)) for _ in range(m)] # This will play a sequence of CNOTs
+            random_tracker = [declare(int, value=[0, 10 + self._NUM_CLIFFORDS,
+                                                  self._CLASS_C1_SIZE + 5, 10 + self._NUM_CLIFFORDS,
+                                                  self._CLASS_CNOT_SIZE + self._CLASS_C1_SIZE + 1, 10 + self._NUM_CLIFFORDS,
+                              self._CLASS_CNOT_SIZE + self._CLASS_C1_SIZE +
+                                                  self._CLASS_SWAP_SIZE, 10 + self._NUM_CLIFFORDS] * 20 + [0] * (736-20)) for _ in range(m)] # This will play a sequence of CNOTs
             experiment_ind = [declare(int, value=0) for _ in range(m)]
             experiment_length = [declare(int, value=0) for _ in range(m)]
 
@@ -324,123 +270,106 @@ class RandomizedBenchmarkProgramBuilder:
 
             # single_amp_ref = declare(fixed, value=[1.0, 0.0, -1.0, 0.0])
             # self.single_amp_ref = single_amp_ref
-
-            # with for_(experiment_ind, cond=(experiment_ind < self.num_experiments), update=(experiment_ind+1)):
-                # run the experiment several times
-
-            for i in range(m):
-                _rand[i].set_seed(5)
-                assign(experiment_length[i],
-                       _rand[i].rand_int(self.max_sequence_length - self.min_seq_length) + self.min_seq_length)
-                assign(number_of_gates[i], 2 * (experiment_length[i] + 1))
-
-            for i in range(m):
-                with for_(current_clifford_ind[i], init=0, cond=(current_clifford_ind[i] < 2*experiment_length[i]),
-                          update=(current_clifford_ind[i] + 2)):
-                    assign(N[i], _rand[i].rand_int(self._NUM_CLIFFORDS * self._NUM_PAULIS))
-                    # assign(N[i], 1)
-                    assign(random_tracker[i][current_clifford_ind[i]], N[i] / 16)
-                    assign(random_tracker[i][current_clifford_ind[i] + 1], (N[i] & 15) + self._NUM_CLIFFORDS)
-                    assign(current_g[i], clifford_mat_values_list[i][N[i] / 16])
-                    assign(current_alpha[i], pauli_mat_values_list[i][N[i] & 15])
-                    # Compute the g and alpha
-                    qua_simple_tableau.then(current_g[i], current_alpha[i], prev_g[i], prev_alpha[i],
-                                            temp_g12[i], temp_alpha12[i], then_helpers[i])
-                    assign(prev_g[i], current_g[i])
-                    assign(prev_alpha[i], current_alpha[i])
-                    assign(current_g[i], temp_g12[i])
-                    assign(current_alpha[i], temp_alpha12[i])
-                # Compute the inverse
-                qua_simple_tableau.inverse(current_g[i], current_alpha[i], prev_g[i], prev_alpha[i], lamb[i], inv_helpers[i])
-                self.qua_insert_clifford_2_g_index(prev_g[i], clifford_mat_values_list[i], inverse_g_ind[i])
-                self.qua_insert_clifford_2_alpha_index(prev_alpha[i], pauli_mat_values_list[i], inverse_alpha_ind[i])
-                assign(random_tracker[i][current_clifford_ind[i]], (inverse_g_ind[i]*inverse_alpha_ind[i]) / 16)
-                assign(random_tracker[i][current_clifford_ind[i] + 1], (inverse_alpha_ind[i] & 15) + self._NUM_CLIFFORDS)
-
-            # ======================================================================================================== #
-            # ======================================================================================================== #
-            # ======================================================================================================== #
-
+            # align(*list(self.config_builder.config["elements"].keys()))
             for pulser in range(m):
-            # pulser=0
-                with for_():
-                    with for_init_():
-                        assign(current_clifford_ind[pulser], 0)
-                        assign(N[pulser], 0)
-                    for_cond(current_clifford_ind[pulser] < number_of_gates[pulser])
-                    with for_update_():
-                        assign(current_clifford_ind[pulser], current_clifford_ind[pulser]+1)
-                        assign(N[pulser], random_tracker[pulser][current_clifford_ind[pulser]])
-                    with for_body_():
-                        with switch_(N[pulser], unsafe=True):
-                            for i in range(self._NUM_CLIFFORDS + self._NUM_PAULIS):
-                                with case_(i):
-                                    self._resolve_case(i, on_pulser=pulser)
-            # pulser = 1
-            # with for_():
-            #     with for_init_():
-            #         assign(current_clifford_ind[pulser], 0)
-            #         assign(N[pulser], 0)
-            #     for_cond(current_clifford_ind[pulser] < number_of_gates[pulser])
-            #     with for_update_():
-            #         assign(current_clifford_ind[pulser], current_clifford_ind[pulser] + 1)
-            #         assign(N[pulser], random_tracker[pulser][current_clifford_ind[pulser]])
-            #     with for_body_():
-            #         with switch_(N[pulser], unsafe=True):
-            #             for i in range(self._NUM_CLIFFORDS + self._NUM_PAULIS):
-            #                 with case_(i):
-            #                     self._resolve_case(i, on_pulser=pulser)
-            #
-            # pulser = 2
-            # with for_():
-            #     with for_init_():
-            #         assign(current_clifford_ind[pulser], 0)
-            #         assign(N[pulser], 0)
-            #     for_cond(current_clifford_ind[pulser] < number_of_gates[pulser])
-            #     with for_update_():
-            #         assign(current_clifford_ind[pulser], current_clifford_ind[pulser] + 1)
-            #         assign(N[pulser], random_tracker[pulser][current_clifford_ind[pulser]])
-            #     with for_body_():
-            #         with switch_(N[pulser], unsafe=True):
-            #             for i in range(self._NUM_CLIFFORDS + self._NUM_PAULIS):
-            #                 with case_(i):
-            #                     self._resolve_case(i, on_pulser=pulser)
-            # wait(ConfigBuilder.PI_PULSE_LEN + 24, "qubit0_xy_p1", "qubit1_xy_p1")
+                with for_(experiment_ind[pulser], cond=(experiment_ind[pulser] < self.num_experiments),
+                              update=(experiment_ind[pulser]+1)):
+                    # run the experiment several times
+                    assign(experiment_length[pulser],
+                           _rand[pulser].rand_int(self.max_sequence_length - self.min_seq_length) + self.min_seq_length)
+                    assign(number_of_gates[pulser], 2 * (experiment_length[pulser] + 1))
 
-            align(*list(self.config_builder.config["elements"].keys()))
-            measure('readout_pulse',
-                    self.resolve_elem(0, "xy", 0), None,
-                    demod.full("integ_weights_cos", I, "out1"),
-                    demod.full("integ_weights_sin", Q, "out1"))
+                    if not self.from_initilized_list:
+                        with for_(current_clifford_ind[pulser], init=0,
+                                  cond=(current_clifford_ind[pulser] < 2 * experiment_length[pulser]),
+                                  update=(current_clifford_ind[pulser] + 2)):
+                            assign(N[pulser], _rand[pulser].rand_int(self._NUM_CLIFFORDS * self._NUM_PAULIS))
+                            assign(random_tracker[pulser][current_clifford_ind[pulser]], N[pulser] / self._NUM_PAULIS)
+                            assign(random_tracker[pulser][current_clifford_ind[pulser] + 1],
+                                   (N[pulser] & (self._NUM_PAULIS -1)) + self._NUM_CLIFFORDS)
+                            # assign(N[pulser], random_tracker[current_clifford_ind] * random_tracker[current_clifford_ind + 1])
+                            assign(current_g[pulser], clifford_mat_values_list[pulser][N[pulser] / self._NUM_PAULIS])
+                            assign(current_alpha[pulser], pauli_mat_values_list[pulser][N[pulser] & (self._NUM_PAULIS-1)])
+                            # Compute the g and alpha
+                            qua_simple_tableau.then(current_g[pulser], current_alpha[pulser],
+                                                    prev_g[pulser], prev_alpha[pulser],
+                                                    temp_g12[pulser], temp_alpha12[pulser], then_helpers[pulser])
+                            assign(prev_g[pulser], current_g[pulser])
+                            assign(prev_alpha[pulser], current_alpha[pulser])
+                            assign(current_g[pulser], temp_g12[pulser])
+                            assign(current_alpha[pulser], temp_alpha12[pulser])
+                        # Compute the inverse
+                        qua_simple_tableau.inverse(current_g[pulser], current_alpha[pulser], prev_g[pulser],
+                                                   prev_alpha[pulser], lamb[pulser], inv_helpers[pulser])
+                        self.qua_insert_clifford_2_g_index(prev_g[pulser], clifford_mat_values_list[pulser],
+                                                           inverse_g_ind[pulser])
+                        self.qua_insert_clifford_2_alpha_index(prev_alpha[pulser], pauli_mat_values_list[pulser],
+                                                               inverse_alpha_ind[pulser])
+                        assign(random_tracker[pulser][current_clifford_ind[pulser]],
+                               (inverse_g_ind[pulser]*inverse_alpha_ind[pulser]) / self._NUM_PAULIS)
+                        assign(random_tracker[pulser][current_clifford_ind[pulser] + 1],
+                               (inverse_alpha_ind[pulser] & (self._NUM_PAULIS - 1)) + self._NUM_CLIFFORDS)
+
+                    # ================================================================================================ #
+                    # ================================================================================================ #
+                    # ================================================================================================ #
+
+                    with for_():
+                        with for_init_():
+                            assign(current_clifford_ind[pulser], 0)
+                            assign(N[pulser], random_tracker[pulser][0])
+                        for_cond(current_clifford_ind[pulser] < number_of_gates[pulser])
+                        with for_update_():
+                            assign(current_clifford_ind[pulser], current_clifford_ind[pulser]+1)
+                            assign(N[pulser], random_tracker[pulser][current_clifford_ind[pulser]])
+                        with for_body_():
+                            with switch_(N[pulser], unsafe=True):
+                                for i in range(self._NUM_CLIFFORDS + self._NUM_PAULIS):
+                                    with case_(i):
+                                        self._resolve_case(i, on_pulser=pulser)
+                    if pulser == m - 1:
+                        # wait((self.config_builder.pi_pulse_len + self._AMPLITUDE_SET_DELAY) //4, self.resolve_elem(0, "xy", m-1))
+                        # wait((self.config_builder.pi_pulse_len + self._AMPLITUDE_SET_DELAY) //4, self.resolve_elem(1, "xy", m-1))
+                        measure('readout_pulse',
+                            self.resolve_elem(0, "xy", m-1), None,
+                            demod.full("integ_weights_cos", I_0, "out1"),
+                            demod.full("integ_weights_sin", Q_0, "out1"))
+                        measure('readout_pulse',
+                                self.resolve_elem(1, "xy", m-1), None,
+                                demod.full("integ_weights_cos", I_1, "out2"),
+                                demod.full("integ_weights_sin", Q_1, "out2"))
+                    else:
+                        wait((self.config_builder.readout_len + 184) //4,
+                             *[self.resolve_elem(i, "xy", pulser) for i in range(2)])
         return rb_program
 
 
     def _resolve_case(self, i, on_pulser=None):
         if i < self._CLASS_C1_SIZE:
-            self._insert_case_single_qubit_gates(*divmod(i, 6), pulser=on_pulser)
+            self._insert_case_single_qubit_gates(*divmod(i, self._CLASS_C1_SIZE_SINGLE), pulser=on_pulser)
         elif self._CLASS_C1_SIZE <= i < self._CLASS_C1_SIZE + self._CLASS_CNOT_SIZE:
             i -= self._CLASS_C1_SIZE
-            self._insert_case_CNOT(*divmod(i // 9, 6), i//3 %3, i % 3, pulser=on_pulser)
+            self._insert_case_CNOT(*divmod(i // 9, self._CLASS_C1_SIZE_SINGLE), i // 3 % 3, i % 3, pulser=on_pulser)
         elif self._CLASS_C1_SIZE + self._CLASS_CNOT_SIZE <= i < self._CLASS_C1_SIZE + self._CLASS_CNOT_SIZE + self._CLASS_SWAP_SIZE:
             i -= (self._CLASS_C1_SIZE + self._CLASS_CNOT_SIZE)
-            self._insert_case_SWAP(*divmod(i // 9, 6), i//3 %3, i % 3, pulser=on_pulser)
+            self._insert_case_ISWAP(*divmod(i // 9, self._CLASS_C1_SIZE_SINGLE), i//3 % 3, i % 3, pulser=on_pulser)
         elif self._CLASS_C1_SIZE + self._CLASS_CNOT_SIZE + self._CLASS_SWAP_SIZE <= i < self._NUM_CLIFFORDS:
             i -= (self._CLASS_C1_SIZE + self._CLASS_CNOT_SIZE + self._CLASS_SWAP_SIZE)
-            self._insert_case_ISWAP(*divmod(i // 9, 6),pulser=on_pulser)
+            self._insert_case_SWAP(*divmod(i // 9, self._CLASS_C1_SIZE_SINGLE), pulser=on_pulser)
         elif i >= self._NUM_CLIFFORDS:
             i -= self._NUM_CLIFFORDS
-            self._insert_case_pauli(*divmod(i, 4), pulser=on_pulser)
+            self._insert_case_pauli(*divmod(i, self._NUM_PAULIS_SINGLE), pulser=on_pulser)
         return
 
     def __embed_c1_play(self, q0_element, q1_element, matrix_ref, amp_tracker, c1_0, c1_1):
         play(f"c1_{c1_0}" * amp(matrix_ref[0][amp_tracker[0]], matrix_ref[1][amp_tracker[0]],
                                 matrix_ref[2][amp_tracker[0]], matrix_ref[3][amp_tracker[0]]), q0_element)
 
-        assign(amp_tracker[0], (amp_tracker[0] + conf.c1_phxz[f"c1_{c1_0}"][2]) & 3)
 
         play(f"c1_{c1_1}" * amp(matrix_ref[0][amp_tracker[1]], matrix_ref[1][amp_tracker[1]],
                                 matrix_ref[2][amp_tracker[1]], matrix_ref[3][amp_tracker[1]]), q1_element)
 
+        assign(amp_tracker[0], (amp_tracker[0] + conf.c1_phxz[f"c1_{c1_0}"][2]) & 3)
         assign(amp_tracker[1], (amp_tracker[1] + conf.c1_phxz[f"c1_{c1_1}"][2]) & 3)
 
 
@@ -452,6 +381,9 @@ class RandomizedBenchmarkProgramBuilder:
         if pulser != play_pulser:
             assign(amp_tracker[0], (amp_tracker[0] + conf.c1_phxz[f"c1_{c1_0}"][2]) & 3)
             assign(amp_tracker[1], (amp_tracker[1] + conf.c1_phxz[f"c1_{c1_1}"][2]) & 3)
+            wait_time = self.config_builder.pi_pulse_len+self._AMPLITUDE_SET_DELAY - self._JUMP_BETWEEN_CASES_DELAY
+            if wait_time >= 16:
+                wait(wait_time // 4, self.resolve_elem(0, "xy", pulser), self.resolve_elem(1, "xy", pulser))
         else:
             self.__embed_c1_play(self.resolve_elem(0, "xy", play_pulser), self.resolve_elem(1, "xy", play_pulser),
                                  matrix_ref, amp_tracker, c1_0, c1_1)
@@ -464,15 +396,17 @@ class RandomizedBenchmarkProgramBuilder:
         if pulser != play_pulser:
             assign(amp_tracker[0], (amp_tracker[0] + conf.pauli_phxz[f"pauli_{p0}"][2]) & 3)
             assign(amp_tracker[1], (amp_tracker[1] + conf.pauli_phxz[f"pauli_{p1}"][2]) & 3)
-            # wait(36, "qubit0_xy_p0", "qubit1_xy_p0")
+            wait_time = self.config_builder.pi_pulse_len + self._AMPLITUDE_SET_DELAY - self._JUMP_BETWEEN_CASES_DELAY
+            if wait_time >= 16:
+                wait(wait_time // 4, self.resolve_elem(0, "xy", pulser), self.resolve_elem(1, "xy", pulser))
         else:
             q1_xy = self.resolve_elem(0, "xy", play_pulser)
             q0_xy = self.resolve_elem(1, "xy", play_pulser)
             play(f"pauli_{p0}" * amp(matrix_ref[0][amp_tracker[0]], matrix_ref[1][amp_tracker[0]],
                                     matrix_ref[2][amp_tracker[0]], matrix_ref[3][amp_tracker[0]]), q0_xy)
-            assign(amp_tracker[0], (amp_tracker[0] + conf.pauli_phxz[f"pauli_{p0}"][2]) & 3)
             play(f"pauli_{p1}"* amp(matrix_ref[0][amp_tracker[1]], matrix_ref[1][amp_tracker[1]],
                                     matrix_ref[2][amp_tracker[1]], matrix_ref[3][amp_tracker[1]]), q1_xy)
+            assign(amp_tracker[0], (amp_tracker[0] + conf.pauli_phxz[f"pauli_{p0}"][2]) & 3)
             assign(amp_tracker[1], (amp_tracker[1] + conf.pauli_phxz[f"pauli_{p1}"][2]) & 3)
 
 
@@ -499,10 +433,16 @@ class RandomizedBenchmarkProgramBuilder:
             # TODO: This amplitude tracker also needs to take care the effective phase resulting from the cnot
             assign(amp_tracker[0], (amp_tracker[0] + conf.s1_phxz[f"s1_{s1_0}"][2] + conf.c1_phxz[f"c1_{c1_0}"][2]) & 3)
             assign(amp_tracker[1], (amp_tracker[1] + conf.s1_phxz[f"s1_{s1_1}"][2] + conf.c1_phxz[f"c1_{c1_1}"][2]) & 3)
+            wait_time = self.config_builder.cnot_length +  \
+                        (self.config_builder.pi_pulse_len * 2 + self._AMPLITUDE_SET_DELAY)-\
+                        self._JUMP_BETWEEN_CASES_DELAY
+            if wait_time >= 16:
+                wait(wait_time // 4, self.resolve_elem(0, "xy", pulser), self.resolve_elem(1, "xy", pulser))
         else:
             q0_xy = self.resolve_elem(0, "xy", play_pulser)
             q1_xy = self.resolve_elem(1, "xy", play_pulser)
             self.__embed_c1_play(q0_xy, q1_xy, matrix_ref, amp_tracker, c1_0, c1_1)
+            wait(self.config_builder.pi_pulse_len // 4, "qubit0_z", "qubit1_z", "coupler")
             if self.bake_cnot:
                 play("cnot", q0_xy)
                 play("cnot", q1_xy)
@@ -520,54 +460,70 @@ class RandomizedBenchmarkProgramBuilder:
                 play("cnot_4_1", q1_xy)
             # TODO: Need another frame rotation
             self.__embed_s0s1_gates(q0_xy, q1_xy, matrix_ref, amp_tracker, s1_0, s1_1)
+            wait((self.config_builder.pi_pulse_len) // 4, "qubit0_z", "qubit1_z", "coupler")
 
-    def _insert_case_SWAP(self, c1_0, c1_1, s1_0, s1_1, pulser=None):
-        play_pulser =  self.config_builder._GATES_TO_PULSERS["SWAP"]
+    def _insert_case_ISWAP(self, c1_0, c1_1, s1_0, s1_1, pulser=None):
+        play_pulser =  self.config_builder._GATES_TO_PULSERS["ISWAP"]
         amp_tracker = self.amplitude_tracker[pulser]
         matrix_ref = [elem[pulser] for elem in self.matrix_reference]
         if pulser != play_pulser:
-            # TODO: This amplitude tracker in case this is not the pulser is incorrect
+            # TODO: This amplitude tracker also needs to take care the effective phase resulting from the swap
             assign(amp_tracker[0], (amp_tracker[0] + conf.s1_phxz[f"s1_{s1_0}"][2] + conf.c1_phxz[f"c1_{c1_0}"][2]) & 3)
             assign(amp_tracker[1], (amp_tracker[1] + conf.s1_phxz[f"s1_{s1_1}"][2] + conf.c1_phxz[f"c1_{c1_1}"][2]) & 3)
+            wait_time = self.config_builder.cz_pulse_len * 2 +  \
+                        self.config_builder.pi_pulse_len * 2 + self._AMPLITUDE_SET_DELAY + self._AMPLITUDE_TRACK_DELAY -\
+                        self._JUMP_BETWEEN_CASES_DELAY
+            if wait_time >= 16:
+                wait(wait_time // 4, self.resolve_elem(0, "xy", pulser), self.resolve_elem(1, "xy", pulser))
         else:
             q0_xy = self.resolve_elem(0, "xy", play_pulser)
             q1_xy = self.resolve_elem(1, "xy", play_pulser)
             self.__embed_c1_play(q0_xy, q1_xy, matrix_ref, amp_tracker, c1_0, c1_1)
-            if self.bake_swap:
-                play("swap", q0_xy)
-                play("swap",q1_xy)
-                play("swap", "qubit0_z")
-                play("swap", "qubit1_z")
-                play("swap", "coupler")
-            else:
-                play("swap_0_0", q0_xy)
-                play("swap_0_1",q1_xy)
-                self.__embed_coupling()
-                play("swap_2_0", q0_xy)
-                play("swap_2_1",q1_xy)
-                self.__embed_coupling()
-                play("swap_4_0", q0_xy)
-                play("swap_4_1",q1_xy)
-                self.__embed_coupling()
-                play("swap_6_0", q0_xy)
-                play("swap_6_1",q1_xy)
-
+            wait((self.config_builder.pi_pulse_len ) // 4, "qubit0_z", "qubit1_z", "coupler")
+            self.__embed_coupling()
+            self.__embed_coupling()
+            wait(self.config_builder.cz_pulse_len * 2 // 4, q0_xy, q1_xy)
             # TODO: Need another frame rotation
             self.__embed_s0s1_gates(q0_xy, q1_xy, matrix_ref, amp_tracker, s1_0, s1_1)
+            wait((self.config_builder.pi_pulse_len) // 4, "qubit0_z", "qubit1_z",
+                 "coupler")
 
-    def _insert_case_ISWAP(self, c1_0, c1_1, pulser=None):
-        play_pulser =  self.config_builder._GATES_TO_PULSERS["ISWAP"]
+    def _insert_case_SWAP(self, c1_0, c1_1, pulser=None):
+        play_pulser =  self.config_builder._GATES_TO_PULSERS["SWAP"]
         amp_tracker = self.amplitude_tracker[pulser]
         matrix_ref = [elem[pulser] for elem in self.matrix_reference]
         if pulser != play_pulser:
             assign(amp_tracker[0], (amp_tracker[0] + conf.c1_phxz[f"c1_{c1_0}"][2]) & 3)
             assign(amp_tracker[1], (amp_tracker[1] + conf.c1_phxz[f"c1_{c1_1}"][2]) & 3)
+            wait_time = self.config_builder.swap_length + self._AMPLITUDE_SET_DELAY +  \
+                        self.config_builder.pi_pulse_len + self._AMPLITUDE_TRACK_DELAY +8 -\
+                        self._JUMP_BETWEEN_CASES_DELAY
+            if wait_time >= 16:
+                wait(wait_time // 4, self.resolve_elem(0, "xy", pulser), self.resolve_elem(1, "xy", pulser))
         else:
             q0_xy = self.resolve_elem(0, "xy", play_pulser)
             q1_xy = self.resolve_elem(1, "xy", play_pulser)
             self.__embed_c1_play(q0_xy, q1_xy, matrix_ref, amp_tracker, c1_0, c1_1)
-            self.__embed_coupling()
-            self.__embed_coupling()
+            wait((self.config_builder.pi_pulse_len + self._AMPLITUDE_SET_DELAY ) // 4 - 8, "qubit0_z", "qubit1_z", "coupler")
+            if self.bake_swap:
+                play("swap", q0_xy)
+                play("swap", q1_xy)
+                play("swap", "qubit0_z")
+                play("swap", "qubit1_z")
+                play("swap", "coupler")
+            else:
+                play("swap_0_0", q0_xy)
+                play("swap_0_1", q1_xy)
+                self.__embed_coupling()
+                play("swap_2_0", q0_xy)
+                play("swap_2_1", q1_xy)
+                self.__embed_coupling()
+                play("swap_4_0", q0_xy)
+                play("swap_4_1", q1_xy)
+                self.__embed_coupling()
+                play("swap_6_0", q0_xy)
+                play("swap_6_1", q1_xy)
+
             # TODO: Add another frame rotation
 
 
@@ -593,10 +549,6 @@ class RandomizedBenchmarkProgramBuilder:
         return values_list
 
 
-
-from conf import *
-from conf import _config
-import time
 class Test:
 
     def __init__(self, config_builder: conf.ConfigBuilder):
@@ -630,8 +582,8 @@ class Test:
         for i in range(num_of_graphs):
             p = pplot.subplot(num_of_graphs,1,i+1)
             pplot.title(i_to_title[i], x=-0.03, y=0.9, fontdict={'horizontalalignment': 'right', 'fontsize':10, 'verticalalignment': 'top'})
-            pplot.xlim([min_lim - min_lim*0.05, max_lim + max_lim * 0.05])
-            pplot.ylim([-0.6, 0.6])
+            pplot.xlim([min_lim - min_lim*0.05, max_lim + max_lim * 0.15])
+            pplot.ylim([-0.75, 0.75])
             pplot.xticks(fontsize=6, y=0.05)
             pplot.yticks(fontsize=6, x=0)
             pplot.ylabel(ylabel='', fontdict=dict(fontsize=8), visible=False)
@@ -746,18 +698,18 @@ class Test:
         return
 
 
-def run_experiment(num_qubits, num_experiments=1, min_sequence_length=1, max_sequence_length=None):
-    config_builder = ConfigBuilder(pulsers_per_qubit=3)
+def run_experiment(num_qubits, num_experiments=1, min_sequence_length=1, max_sequence_length=None, from_initilized_list=False):
+    config_builder = conf.ConfigBuilder(pulsers_per_qubit=1)
     config_builder.build()
     rb = RandomizedBenchmarkProgramBuilder(config_builder, num_experiments=num_experiments, num_qubits=num_qubits,
                                            min_sequence_length=min_sequence_length,
-                                           max_sequence_length=max_sequence_length)
+                                           max_sequence_length=max_sequence_length,
+                                           from_initilized_list=from_initilized_list)
     p = rb.build_qua_program()
     tester = Test(config_builder)
-    d =tester.run_simulation(p, ["current_clifford_ind_p0", "current_clifford_ind_p1", "case_single_p1", "case_single",
-                                 "case_pauli", "case_pauli_p0"])
-    for k,v in d.items():
-        print(f"{k:<20}, {[i for i in v]}")
+    d = tester.run_simulation(p, None)
+    # for k,v in d.items():
+    #     print(f"{k:<20}, {[i for i in v]}")
 
 
 if __name__ == '__main__':
@@ -766,7 +718,8 @@ if __name__ == '__main__':
     # tester = Test(config_builder)
     # tester.test_general()
     # Test()
-    run_experiment(2,1, 10,11)
+    run_experiment(2,1, 3,4, from_initilized_list=True)
+    # run_experiment(2,1, 2,3)
 
     # rb.py_setup_gates_unique_ids()
     # rb.py_setup_translation_to_gate()
