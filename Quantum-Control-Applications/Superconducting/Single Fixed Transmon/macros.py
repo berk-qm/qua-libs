@@ -153,7 +153,7 @@ class qubit_frequency_tracking:
         self.I = declare(fixed)
         self.Q = declare(fixed)
         self.state_estimation = declare(fixed)
-        self.state_estimation_st = [declare_stream() for i in range(10)]  # TODO Why?
+        self.state_estimation_st = [declare_stream() for i in range(10)]  # TODO Why 10 and not 2?
         self.state_estimation_st_idx = 0
 
         self.res = declare(bool)
@@ -168,7 +168,7 @@ class qubit_frequency_tracking:
         self.if_total = declare(int, value=0)
         self.se_vec = declare(fixed, size=3)
         self.idx = declare(int)
-        self.fres_corr = declare(int, value=int(self.f_res + 0.5))
+        self.fres_corr = declare(int, value=int(self.f_res + 0.5)) # TODO why +0.5?
         self.fres_corr_st = declare_stream()
         self.corr = declare(int, value=0)
         self.corr_st = declare_stream()
@@ -393,24 +393,24 @@ class qubit_frequency_tracking:
         print(f"c = {c}")
         assign(self.se_vec[0], 0)
         assign(self.se_vec[1], 0)
-
+        # TODO what does this 2**15 mean? biggest?
         with for_(self.p, 0, self.p < 32768, self.p + 1):
+            # Go to the left side of the central fringe
             assign(self.f, self.f_res - self.delta)
-
+            # Alternate between left and right sides
             with for_(self.idx, 0, self.idx < 2, self.idx + 1):
-                # Should be replaced by the initialization procedure of the qubit to the ground state #
-                wait(10000, "qubit")
-                # Note: if you are using active reset, you might want to do it with the new corrected
-                # frequency
-                #######################################################################################
-
+                # Qubit initialization
+                # Note: if you are using active reset, you might want to do it with the new corrected frequency
+                reset_qubit("cooldown", cooldown_time=1000)
+                ####################################################################################################
+                # Set qubit frequency
                 update_frequency(self.qubit, self.f)
+                # Ramsey sequence
                 play("pi2", self.qubit)
                 wait(self.tau0, self.qubit)
                 play("pi2", self.qubit)
 
                 align(self.qubit, self.rr)
-
                 # should be replaced by the readout procedure of the qubit. A boolean value should be assigned into
                 # the QUA variable "self.res". True for the qubit in the excited. ##################################
                 measure(
@@ -421,16 +421,15 @@ class qubit_frequency_tracking:
                 )
                 assign(self.res, self.I > self.ge_threshold)
                 ####################################################################################################
-
-                assign(
-                    self.se_vec[self.idx],
-                    self.se_vec[self.idx] + (Cast.to_fixed(self.res) >> 15),
-                )
+                # Sum the results and divide by the number of iterations to get the average on the fly
+                assign(self.se_vec[self.idx], self.se_vec[self.idx] + (Cast.to_fixed(self.res) >> 15))
+                # Go to the right side of the central fringe
                 assign(self.f, self.f + 2 * self.delta)
 
+        # Derive the frequency shift
         assign(self.corr, Cast.mul_int_by_fixed(c, (self.se_vec[0] - self.se_vec[1])))
+        # To keep track of the qubit frequency over time
         assign(self.fres_corr, self.fres_corr - self.corr)
-        # update_frequency(self.qubit, self.fres_corr)
 
         save(self.fres_corr, self.fres_corr_st)
         save(self.corr, self.corr_st)

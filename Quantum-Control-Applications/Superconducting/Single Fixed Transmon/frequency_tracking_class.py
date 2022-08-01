@@ -6,6 +6,7 @@ from macros import qubit_frequency_tracking
 from configuration import *
 import matplotlib.pyplot as plt
 import time
+from qualang_tools.results import fetching_tool, progress_counter
 
 
 ######################################
@@ -69,41 +70,36 @@ job.result_handles.wait_for_all_values()
 plt.figure("Pe_fd")
 freq_track_obj.freq_domain_ramsey_full_sweep_analysis(job.result_handles, "Pe_fd")
 
-
 #########################
 #  Real-time correction #
 #########################
-n_avg = 20
-tau_vec = np.arange(4, 50_000, 50)
+n_repetitions = 10000
+tau_vec = np.arange(4, 50_000, 200)
 with program() as prog:
 
     i = declare(int)
-
-    with for_(i, 0, i < 10000, i + 1):
+    i_st = declare_stream()
+    with for_(i, 0, i < n_repetitions, i + 1):
 
         freq_track_obj.time_domain_ramsey_full_sweep(n_avg, freq_track_obj.f_det, tau_vec, False)
         freq_track_obj.two_points_ramsey()
         freq_track_obj.time_domain_ramsey_full_sweep(n_avg, freq_track_obj.f_det, tau_vec, True)
-
+        save(i, i_st)
     with stream_processing():
-        freq_track_obj.state_estimation_st[0].buffer(n_avg, len(freq_track_obj.tau_vec)).map(FUNCTIONS.average()).save(
-            "Pe_td_ref"
-        )
-        freq_track_obj.state_estimation_st[1].buffer(n_avg, len(freq_track_obj.tau_vec)).map(FUNCTIONS.average()).save(
-            "Pe_td_corr"
-        )
+        freq_track_obj.state_estimation_st[0].buffer(n_avg, len(tau_vec)).average().save("Pe_td_ref" )
+        freq_track_obj.state_estimation_st[1].buffer(n_avg, len(tau_vec)).average().save("Pe_td_corr")
+        i_st.save("iteration")
 
+# Execute the program
 job = qm.execute(prog)
-td_ref_handle = job.result_handles.get("Pe_td_ref")
-td_corr_handle = job.result_handles.get("Pe_td_corr")
+# Handle results
+results = fetching_tool(job, ["Pe_td_ref", "Pe_td_corr", "iteration"], mode="live")
 
-td_ref_handle.wait_for_values(1)
-td_corr_handle.wait_for_values(1)
-
+# Starting time
 t0 = time.time()
-t0_local_time = time.localtime()
+
+hours = 2 # TODO how is this related to the QUA loops?
 t_ = t0
-hours = 2
 cond = (t_ - t0) / 3600 < hours
 fig, (ax1, ax2) = plt.subplots(1, 2)
 Pe_td_ref = []
@@ -111,13 +107,19 @@ Pe_td_corr = []
 t = []
 
 while cond:
-
-    Pe_td_ref_ = td_ref_handle.fetch_all()
-    Pe_td_corr_ = td_corr_handle.fetch_all()
+    # Fetch results
+    Pe_td_ref_, Pe_td_corr_, iteration = results.fetch_all()
+    # Progress bar
+    progress_counter(iteration, n_repetitions, start_time=t0)
+    # Get current time
     t_ = time.time()
+    # Update while loop condition
+    cond = (t_ - t0) / 3600 < hours
+    # Update time vector and results
     t.append((t_ - t0) / 3600)
     Pe_td_ref.append(Pe_td_ref_)
     Pe_td_corr.append(Pe_td_corr_)
+    # Plot results
     ax1.pcolormesh(freq_track_obj.tau_vec, t, Pe_td_ref)
     ax1.title.set_text("TD Ramsey feedback off")
     ax1.set_xlabel("tau [ns]")
