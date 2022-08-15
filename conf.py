@@ -130,7 +130,7 @@ pauli_phxz = {"pauli_0": (0,0.7,0), "pauli_1": (1,0.7,0), "pauli_2": (0,0.7,0), 
 
 class ConfigBuilder:
 
-    PI_PULSE_LEN = 72
+    PI_PULSE_LEN = 40
     _GATES_TO_PULSERS_3P = {"C1": 0, "PAULI": 1, "CNOT": 2, "ISWAP": 2, "SWAP": 2}
     _GATES_TO_PULSERS_1P = {"C1": 0, "PAULI": 0, "CNOT": 0, "ISWAP": 0, "SWAP": 0}
     _GATES_TO_PULSERS = {}

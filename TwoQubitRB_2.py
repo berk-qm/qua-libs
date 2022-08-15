@@ -170,13 +170,13 @@ class RandomizedBenchmarkProgramBuilder:
 
     _NUM_PAULIS_SINGLE = 4
     _NUM_PAULIS = _NUM_PAULIS_SINGLE ** 2
-    _CLASS_C1_SIZE_SINGLE = 1
+    _CLASS_C1_SIZE_SINGLE = 3
     _CLASS_C1_SIZE = _CLASS_C1_SIZE_SINGLE ** 2
-    _CLASS_CNOT_SIZE_SINGLE = 1
+    _CLASS_CNOT_SIZE_SINGLE = 5
     _CLASS_CNOT_SIZE = _CLASS_CNOT_SIZE_SINGLE ** 2
-    _CLASS_SWAP_SIZE_SINGLE = 1
+    _CLASS_SWAP_SIZE_SINGLE = 1 + 4
     _CLASS_SWAP_SIZE = _CLASS_SWAP_SIZE_SINGLE ** 2
-    _CLASS_ISWAP_SIZE_SINGLE = 1
+    _CLASS_ISWAP_SIZE_SINGLE = 1 + 2
     _CLASS_ISWAP_SIZE = _CLASS_ISWAP_SIZE_SINGLE ** 2
 
     _NUM_CLIFFORDS = _CLASS_CNOT_SIZE + _CLASS_C1_SIZE + _CLASS_ISWAP_SIZE + _CLASS_SWAP_SIZE
@@ -311,24 +311,25 @@ class RandomizedBenchmarkProgramBuilder:
                                (inverse_g_ind[pulser]*inverse_alpha_ind[pulser]) / self._NUM_PAULIS)
                         assign(random_tracker[pulser][current_clifford_ind[pulser] + 1],
                                (inverse_alpha_ind[pulser] & (self._NUM_PAULIS - 1)) + self._NUM_CLIFFORDS)
-                    save(2, "end_all_calc")
+                    # save(2, "end_all_calc")
                     # ================================================================================================ #
                     # ================================================================================================ #
                     # ================================================================================================ #
 
-                    with for_():
-                        with for_init_():
-                            assign(current_clifford_ind[pulser], 0)
-                            assign(N[pulser], random_tracker[pulser][0])
-                        for_cond(current_clifford_ind[pulser] < number_of_gates[pulser])
-                        with for_update_():
-                            assign(current_clifford_ind[pulser], current_clifford_ind[pulser]+1)
-                            assign(N[pulser], random_tracker[pulser][current_clifford_ind[pulser]])
-                        with for_body_():
-                            with switch_(N[pulser], unsafe=True):
-                                for i in range(self._NUM_CLIFFORDS + self._NUM_PAULIS):
-                                    with case_(i):
-                                        self._resolve_case(i, on_pulser=pulser)
+                    # with for_():
+                    #     with for_init_():
+                    #         assign(current_clifford_ind[pulser], 0)
+                    #         # assign(N[pulser], random_tracker[pulser][0])
+                    #     for_cond(current_clifford_ind[pulser] < number_of_gates[pulser])
+                    #     with for_update_():
+                    #         assign(current_clifford_ind[pulser], current_clifford_ind[pulser] + 1)
+                    #         # assign(N[pulser], random_tracker[pulser][current_clifford_ind[pulser]])
+                    #     with for_body_():
+                    with for_(current_clifford_ind[pulser], 0, current_clifford_ind[pulser] < number_of_gates[pulser], current_clifford_ind[pulser] + 1):
+                        with switch_(random_tracker[pulser][current_clifford_ind[pulser]], unsafe=True):
+                            for i in range(self._NUM_CLIFFORDS + self._NUM_PAULIS):
+                                with case_(i):
+                                    self._resolve_case(i, on_pulser=pulser)
                     if pulser == m - 1:
                         # wait((self.config_builder.pi_pulse_len + self._AMPLITUDE_SET_DELAY) //4, self.resolve_elem(0, "xy", m-1))
                         # wait((self.config_builder.pi_pulse_len + self._AMPLITUDE_SET_DELAY) //4, self.resolve_elem(1, "xy", m-1))
@@ -364,20 +365,17 @@ class RandomizedBenchmarkProgramBuilder:
         return
 
     def __embed_c1_play(self, q0_element, q1_element, matrix_ref, amp_tracker, c1_0, c1_1):
-        play(f"c1_{c1_0}" * amp(matrix_ref[0][amp_tracker[0]], matrix_ref[1][amp_tracker[0]],
-                                matrix_ref[2][amp_tracker[0]], matrix_ref[3][amp_tracker[0]]), q0_element)
-
-
-        play(f"c1_{c1_1}" * amp(matrix_ref[0][amp_tracker[1]], matrix_ref[1][amp_tracker[1]],
-                                matrix_ref[2][amp_tracker[1]], matrix_ref[3][amp_tracker[1]]), q1_element)
-
-        assign(amp_tracker[0], (amp_tracker[0] + conf.c1_phxz[f"c1_{c1_0}"][2]) & 3)
-        assign(amp_tracker[1], (amp_tracker[1] + conf.c1_phxz[f"c1_{c1_1}"][2]) & 3)
+        play(f"c1_{c1_0}", q0_element)
+        play(f"c1_{c1_1}" ,q1_element)
+        frame_rotation_2pi(conf.c1_phxz[f"c1_{c1_0}"][2], q0_element)
+        frame_rotation_2pi(conf.c1_phxz[f"c1_{c1_1}"][2], q1_element)
+        # assign(amp_tracker[0], (amp_tracker[0] + conf.c1_phxz[f"c1_{c1_0}"][2]) & 3)
+        # assign(amp_tracker[1], (amp_tracker[1] + conf.c1_phxz[f"c1_{c1_1}"][2]) & 3)
 
 
     def _insert_case_single_qubit_gates(self, c1_0, c1_1, pulser=None):
         ''' single qubit gate will be played in pulser 0. '''
-        save(3, "case0")
+        # save(3, "case0")
         play_pulser =  self.config_builder._GATES_TO_PULSERS["C1"]
         amp_tracker = self.amplitude_tracker[pulser]
         matrix_ref = [elem[pulser] for elem in self.matrix_reference]
@@ -393,7 +391,7 @@ class RandomizedBenchmarkProgramBuilder:
 
     def _insert_case_pauli(self, p0, p1, pulser=None):
         ''' pauli gate will be played in pulser 1. '''
-        save(3, "case1")
+        # save(3, "case1")
         play_pulser =  self.config_builder._GATES_TO_PULSERS["PAULI"]
         amp_tracker = self.amplitude_tracker[pulser]
         matrix_ref = [elem[pulser] for elem in self.matrix_reference]
@@ -406,23 +404,23 @@ class RandomizedBenchmarkProgramBuilder:
         else:
             q1_xy = self.resolve_elem(0, "xy", play_pulser)
             q0_xy = self.resolve_elem(1, "xy", play_pulser)
-            play(f"pauli_{p0}" * amp(matrix_ref[0][amp_tracker[0]], matrix_ref[1][amp_tracker[0]],
-                                    matrix_ref[2][amp_tracker[0]], matrix_ref[3][amp_tracker[0]]), q0_xy)
-            play(f"pauli_{p1}"* amp(matrix_ref[0][amp_tracker[1]], matrix_ref[1][amp_tracker[1]],
-                                    matrix_ref[2][amp_tracker[1]], matrix_ref[3][amp_tracker[1]]), q1_xy)
-            assign(amp_tracker[0], (amp_tracker[0] + conf.pauli_phxz[f"pauli_{p0}"][2]) & 3)
-            assign(amp_tracker[1], (amp_tracker[1] + conf.pauli_phxz[f"pauli_{p1}"][2]) & 3)
+            play(f"pauli_{p0}" , q0_xy)
+            play(f"pauli_{p1}", q1_xy)
+            frame_rotation_2pi(conf.pauli_phxz[f"pauli_{p0}"][2], q0_xy)
+            frame_rotation_2pi(conf.pauli_phxz[f"pauli_{p1}"][2], q1_xy)
+
+            # assign(amp_tracker[0], (amp_tracker[0] + conf.pauli_phxz[f"pauli_{p0}"][2]) & 3)
+            # assign(amp_tracker[1], (amp_tracker[1] + conf.pauli_phxz[f"pauli_{p1}"][2]) & 3)
 
 
     def __embed_s0s1_gates(self, q0_element, q1_element, matrix_ref, amp_tracker, s1_0, s1_1):
-        play(f"s1_{s1_0}" * amp(matrix_ref[0][amp_tracker[0]], matrix_ref[1][amp_tracker[0]],
-                                matrix_ref[2][amp_tracker[0]], matrix_ref[3][amp_tracker[0]]),
+        play(f"s1_{s1_0}" ,
              q0_element)
-        play(f"s1_{s1_1}" * amp(matrix_ref[0][amp_tracker[1]], matrix_ref[1][amp_tracker[1]],
-                                matrix_ref[2][amp_tracker[1]], matrix_ref[3][amp_tracker[1]]),
+        play(f"s1_{s1_1}" ,
              q1_element)
-        assign(amp_tracker[0], (amp_tracker[0] + conf.s1_phxz[f"s1_{s1_0}"][2]) & 3)
-        assign(amp_tracker[1], (amp_tracker[1] + conf.s1_phxz[f"s1_{s1_1}"][2]) & 3)
+        frame_rotation_2pi( conf.s1_phxz[f"s1_{s1_0}"][2], q0_element)
+        frame_rotation_2pi( conf.s1_phxz[f"s1_{s1_1}"][2], q1_element)
+
 
     def __embed_coupling(self):
         play("coupler_tone", "qubit0_z")
@@ -430,7 +428,7 @@ class RandomizedBenchmarkProgramBuilder:
         play("coupler_tone", "coupler")
 
     def _insert_case_CNOT(self, c1_0, c1_1, s1_0, s1_1, pulser=None):
-        save(3, "case2")
+        # save(3, "case2")
         play_pulser = self.config_builder._GATES_TO_PULSERS["CNOT"]
         amp_tracker = self.amplitude_tracker[pulser]
         matrix_ref = [elem[pulser] for elem in self.matrix_reference]
@@ -447,7 +445,8 @@ class RandomizedBenchmarkProgramBuilder:
             q0_xy = self.resolve_elem(0, "xy", play_pulser)
             q1_xy = self.resolve_elem(1, "xy", play_pulser)
             self.__embed_c1_play(q0_xy, q1_xy, matrix_ref, amp_tracker, c1_0, c1_1)
-            wait(self.config_builder.pi_pulse_len // 4, "qubit0_z", "qubit1_z", "coupler")
+            # wait(self.config_builder.pi_pulse_len // 4, "qubit0_z", "qubit1_z", "coupler")
+            align(q0_xy, q1_xy, "qubit0_z", "qubit1_z", "coupler")
             if self.bake_cnot:
                 play("cnot", q0_xy)
                 play("cnot", q1_xy)
@@ -465,10 +464,10 @@ class RandomizedBenchmarkProgramBuilder:
                 play("cnot_4_1", q1_xy)
             # TODO: Need another frame rotation
             self.__embed_s0s1_gates(q0_xy, q1_xy, matrix_ref, amp_tracker, s1_0, s1_1)
-            wait((self.config_builder.pi_pulse_len) // 4, "qubit0_z", "qubit1_z", "coupler")
+            # wait((self.config_builder.pi_pulse_len) // 4, "qubit0_z", "qubit1_z", "coupler")
 
     def _insert_case_ISWAP(self, c1_0, c1_1, s1_0, s1_1, pulser=None):
-        save(3, "case3")
+        # save(3, "case3")
         play_pulser =  self.config_builder._GATES_TO_PULSERS["ISWAP"]
         amp_tracker = self.amplitude_tracker[pulser]
         matrix_ref = [elem[pulser] for elem in self.matrix_reference]
@@ -485,7 +484,8 @@ class RandomizedBenchmarkProgramBuilder:
             q0_xy = self.resolve_elem(0, "xy", play_pulser)
             q1_xy = self.resolve_elem(1, "xy", play_pulser)
             self.__embed_c1_play(q0_xy, q1_xy, matrix_ref, amp_tracker, c1_0, c1_1)
-            wait((self.config_builder.pi_pulse_len ) // 4, "qubit0_z", "qubit1_z", "coupler")
+            # wait((self.config_builder.pi_pulse_len ) // 4, "qubit0_z", "qubit1_z", "coupler")
+            align(q0_xy, q1_xy, "qubit0_z", "qubit1_z", "coupler", q0_xy, q1_xy)
             self.__embed_coupling()
             self.__embed_coupling()
             wait(self.config_builder.cz_pulse_len * 2 // 4, q0_xy, q1_xy)
@@ -495,7 +495,7 @@ class RandomizedBenchmarkProgramBuilder:
                  "coupler")
 
     def _insert_case_SWAP(self, c1_0, c1_1, pulser=None):
-        save(3, "case4")
+        # save(3, "case4")
         play_pulser =  self.config_builder._GATES_TO_PULSERS["SWAP"]
         amp_tracker = self.amplitude_tracker[pulser]
         matrix_ref = [elem[pulser] for elem in self.matrix_reference]
@@ -511,7 +511,8 @@ class RandomizedBenchmarkProgramBuilder:
             q0_xy = self.resolve_elem(0, "xy", play_pulser)
             q1_xy = self.resolve_elem(1, "xy", play_pulser)
             self.__embed_c1_play(q0_xy, q1_xy, matrix_ref, amp_tracker, c1_0, c1_1)
-            wait((self.config_builder.pi_pulse_len + self._AMPLITUDE_SET_DELAY ) // 4 - 8, "qubit0_z", "qubit1_z", "coupler")
+            align(q0_xy, q1_xy, "qubit0_z", "qubit1_z", "coupler", q0_xy, q1_xy)
+            # wait((self.config_builder.pi_pulse_len + self._AMPLITUDE_SET_DELAY ) // 4 - 8, "qubit0_z", "qubit1_z", "coupler")
             if self.bake_swap:
                 play("swap", q0_xy)
                 play("swap", q1_xy)
