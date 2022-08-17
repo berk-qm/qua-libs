@@ -25,7 +25,10 @@ def IQ_imbalance(g, phi):
     c = np.cos(phi)
     s = np.sin(phi)
     N = 1 / ((1 - g**2) * (2 * c**2 - 1))
-    return [float(N * x) for x in [(1 - g) * c, (1 + g) * s, (1 - g) * s, (1 + g) * c]]
+    return [
+        float(N * x)
+        for x in [(1 - g) * c, (1 + g) * s, (1 - g) * s, (1 + g) * c]
+    ]
 
 
 # layer 1: bare state
@@ -189,6 +192,22 @@ state = {
             "target": 1,
             "gate_time": None,
             "correction_matrix": IQ_imbalance(0, 0),
+            "control_pulses": {
+                "simple": {
+                    "amplitude": 0.1,
+                    "duration": 16e-9,
+                    "phase": 0,  # in degrees
+                },
+                "echo": {
+                    "amplitude": 0.1,
+                    "duration": 16e-9,
+                    "phase": 0,
+                },
+                "cancellation_tone": {
+                    "amplitude": 0.1,
+                    "phase": 0,
+                },
+            },
             "interaction strength": {
                 "ix": None,
                 "iy": None,
@@ -203,6 +222,22 @@ state = {
             "target": 0,
             "gate_time": None,
             "correction_matrix": IQ_imbalance(0, 0),
+            "control_pulses": {
+                "simple": {
+                    "amplitude": 0.1,
+                    "duration": 16e-9,
+                    "phase": 0,  # in degrees
+                },
+                "echo": {
+                    "amplitude": 0.1,
+                    "duration": 16e-9,
+                    "phase": 0,
+                },
+                "cancellation_tone": {
+                    "amplitude": 0.1,
+                    "phase": 0,
+                },
+            },
             "interaction strength": {
                 "ix": None,
                 "iy": None,
@@ -217,16 +252,6 @@ state = {
 }
 
 
-# layer 2: parameters modifications over bare state
-# state["OPX_config"]["elements"]["rr1"]["intermediate_frequency"] = int(52e6)
-# state["OPX_config"]["mixers"]["mixer_rr"][0]["intermediate_frequency"] = int(
-#     52e6
-# )
-
-
-# layer 3: structure change to bare state
-
-
 def add_qubits(state: Dict, config: Dict):
     for q in range(len(state["qubits"])):
         wiring = state["qubits"][q]["wiring"]
@@ -237,7 +262,8 @@ def add_qubits(state: Dict, config: Dict):
                 "lo_frequency": wiring["lo_freq"],
                 "mixer": f"mixer_q{q}",
             },
-            "intermediate_frequency": round(state["qubits"][q]["f_01"]) - wiring["lo_freq"],
+            "intermediate_frequency": round(state["qubits"][q]["f_01"])
+            - wiring["lo_freq"],
             "operations": {
                 "cw": "const_pulse",
                 "saturation": "saturation_pulse",
@@ -247,7 +273,8 @@ def add_qubits(state: Dict, config: Dict):
             config["mixers"][f"mixer_q{q}"] = []
         config["mixers"][f"mixer_q{q}"].append(
             {
-                "intermediate_frequency": round(state["qubits"][q]["f_01"]) - wiring["lo_freq"],
+                "intermediate_frequency": round(state["qubits"][q]["f_01"])
+                - wiring["lo_freq"],
                 "lo_frequency": wiring["lo_freq"],
                 "correction": wiring["correction_matrix"],
             }
@@ -265,7 +292,9 @@ def add_readout_resonators(state, config):
                 "lo_frequency": round(readout_line["lo_freq"]),
                 "mixer": "mixer_rr",
             },
-            "intermediate_frequency": round(v["f_res"] - readout_line["lo_freq"]),
+            "intermediate_frequency": round(
+                v["f_res"] - readout_line["lo_freq"]
+            ),
             "operations": {
                 "cw": "const_pulse",
                 "readout": f"readout_pulse_rr{r}",
@@ -281,7 +310,9 @@ def add_readout_resonators(state, config):
             config["mixers"]["mixer_rr"] = []
         config["mixers"]["mixer_rr"].append(
             {
-                "intermediate_frequency": round(v["f_res"] - readout_line["lo_freq"]),
+                "intermediate_frequency": round(
+                    v["f_res"] - readout_line["lo_freq"]
+                ),
                 "lo_frequency": readout_line["lo_freq"],
                 "correction": v["wiring"]["correction_matrix"],
             }
@@ -321,16 +352,28 @@ def add_readout_resonators(state, config):
             "sine": [(-1.0, round(readout_line["length"] * 1e9))],
         }
         config["integration_weights"][f"rotated_cosine_weights_rr{r}"] = {
-            "cosine": [(np.cos(rot_angle_in_pi), round(readout_line["length"] * 1e9))],
-            "sine": [(-np.sin(rot_angle_in_pi), round(readout_line["length"] * 1e9))],
+            "cosine": [
+                (np.cos(rot_angle_in_pi), round(readout_line["length"] * 1e9))
+            ],
+            "sine": [
+                (-np.sin(rot_angle_in_pi), round(readout_line["length"] * 1e9))
+            ],
         }
         config["integration_weights"][f"rotated_sine_weights_rr{r}"] = {
-            "cosine": [(np.sin(rot_angle_in_pi), round(readout_line["length"] * 1e9))],
-            "sine": [(np.cos(rot_angle_in_pi), round(readout_line["length"] * 1e9))],
+            "cosine": [
+                (np.sin(rot_angle_in_pi), round(readout_line["length"] * 1e9))
+            ],
+            "sine": [
+                (np.cos(rot_angle_in_pi), round(readout_line["length"] * 1e9))
+            ],
         }
         config["integration_weights"][f"rotated_minus_sine_weights_rr{r}"] = {
-            "cosine": [(-np.sin(rot_angle_in_pi), round(readout_line["length"] * 1e9))],
-            "sine": [(-np.cos(rot_angle_in_pi), round(readout_line["length"] * 1e9))],
+            "cosine": [
+                (-np.sin(rot_angle_in_pi), round(readout_line["length"] * 1e9))
+            ],
+            "sine": [
+                (-np.cos(rot_angle_in_pi), round(readout_line["length"] * 1e9))
+            ],
         }
 
 
@@ -355,9 +398,13 @@ def add_qb_rot(
         wf_Q: Optional, Q waveform
     """
     if direction not in ["x", "y"]:
-        raise ValueError(f"Only x and y are accepted directions, received {direction}")
+        raise ValueError(
+            f"Only x and y are accepted directions, received {direction}"
+        )
     if q >= len(state["qubits"]):
-        raise ValueError(f"Qubit {q} is not configured in state. Please add qubit q first.")
+        raise ValueError(
+            f"Qubit {q} is not configured in state. Please add qubit q first."
+        )
     if type(angle) != int:
         raise ValueError("Only integers are accepted as angle.")
 
@@ -371,20 +418,32 @@ def add_qb_rot(
     if len(wf_I) != len(wf_Q):
         raise ValueError("wf_I and wf_Q should have same lengths!")
 
-    wv = np.sign(angle) * (wf_I * np.cos(direction_angle) + wf_Q * np.sin(direction_angle))
+    wv = np.sign(angle) * (
+        wf_I * np.cos(direction_angle) + wf_Q * np.sin(direction_angle)
+    )
     if np.all((wv == 0)):
-        config["waveforms"][f"{direction}{angle}_I_wf_q{q}"] = {"type": "constant"}
+        config["waveforms"][f"{direction}{angle}_I_wf_q{q}"] = {
+            "type": "constant"
+        }
         config["waveforms"][f"{direction}{angle}_I_wf_q{q}"]["sample"] = 0
     else:
-        config["waveforms"][f"{direction}{angle}_I_wf_q{q}"] = {"type": "arbitrary"}
+        config["waveforms"][f"{direction}{angle}_I_wf_q{q}"] = {
+            "type": "arbitrary"
+        }
         config["waveforms"][f"{direction}{angle}_I_wf_q{q}"]["samples"] = wv
 
-    wv = np.sign(angle) * ((-wf_I) * np.sin(direction_angle) + wf_Q * np.cos(direction_angle))
+    wv = np.sign(angle) * (
+        (-wf_I) * np.sin(direction_angle) + wf_Q * np.cos(direction_angle)
+    )
     if np.all((wv == 0)):
-        config["waveforms"][f"{direction}{angle}_Q_wf_q{q}"] = {"type": "constant"}
+        config["waveforms"][f"{direction}{angle}_Q_wf_q{q}"] = {
+            "type": "constant"
+        }
         config["waveforms"][f"{direction}{angle}_Q_wf_q{q}"]["sample"] = 0
     else:
-        config["waveforms"][f"{direction}{angle}_Q_wf_q{q}"] = {"type": "arbitrary"}
+        config["waveforms"][f"{direction}{angle}_Q_wf_q{q}"] = {
+            "type": "arbitrary"
+        }
         config["waveforms"][f"{direction}{angle}_Q_wf_q{q}"]["samples"] = wv
 
     config["pulses"][f"{direction}{angle}_pulse_q{q}"] = {
@@ -395,7 +454,9 @@ def add_qb_rot(
             "Q": f"{direction}{angle}_Q_wf_q{q}",
         },
     }
-    config["elements"][f"q{q}"]["operations"][f"{direction}{angle}"] = f"{direction}{angle}_pulse_q{q}"
+    config["elements"][f"q{q}"]["operations"][
+        f"{direction}{angle}"
+    ] = f"{direction}{angle}_pulse_q{q}"
 
 
 def add_cross_resonance_gates(state, config):
@@ -410,20 +471,148 @@ def add_cross_resonance_gates(state, config):
                     config["elements"][f"q{v['control']}"]["mixInputs"]["Q"][0],
                     config["elements"][f"q{v['control']}"]["mixInputs"]["Q"][1],
                 ),
-                "lo_frequency": config["elements"][f"q{v['control']}"]["mixInputs"]["lo_frequency"],
-                "mixer": f"mixer_q{v['control']}",
+                "lo_frequency": config["elements"][f'q{v["control"]}'][
+                    "mixInputs"
+                ]["lo_frequency"],
+                "mixer": f'mixer_q{v["control"]}',
             },
-            "intermediate_frequency": round(state["qubits"][v["target"]]["f_01"])
+            "intermediate_frequency": round(
+                state["qubits"][v["target"]]["f_01"]
+            )
             - state["qubits"][v["control"]]["wiring"]["lo_freq"],
-            "operations": {
-                "cw": "const_pulse",
+            "operations": {},
+        }
+
+        config["elements"][gate]["operations"]["simple"] = f"{gate}_simple"
+        config["pulses"][f"{gate}_simple"] = {
+            "operation": "control",
+            "length": round(v["control_pulses"]["simple"]["duration"] * 1e9),
+            "waveforms": {
+                "I": f"{gate}_simple_wf_i",
+                "Q": f"{gate}_simple_wf_q",
             },
         }
+        config["waveforms"][f"{gate}_simple_wf_i"] = {
+            "type": "constant",
+            "sample": v["control_pulses"]["simple"]["amplitude"]
+            * np.cos(v["control_pulses"]["simple"]["phase"] / 180 * np.pi),
+        }
+        config["waveforms"][f"{gate}_simple_wf_q"] = {
+            "type": "constant",
+            "sample": v["control_pulses"]["simple"]["amplitude"]
+            * np.sin(v["control_pulses"]["simple"]["phase"] / 180 * np.pi),
+        }
+
+        config["elements"][gate]["operations"][
+            "echo_plus"
+        ] = f"{gate}_echo_plus"
+        config["pulses"][f"{gate}_echo_plus"] = {
+            "operation": "control",
+            "length": round(v["control_pulses"]["echo"]["duration"] * 1e9),
+            "waveforms": {
+                "I": f"{gate}_echo_plus_wf_i",
+                "Q": f"{gate}_echo_plus_wf_q",
+            },
+        }
+        config["waveforms"][f"{gate}_echo_plus_wf_i"] = {
+            "type": "constant",
+            "sample": v["control_pulses"]["echo"]["amplitude"]
+            * np.cos(v["control_pulses"]["echo"]["phase"] / 180 * np.pi),
+        }
+        config["waveforms"][f"{gate}_echo_plus_wf_q"] = {
+            "type": "constant",
+            "sample": v["control_pulses"]["echo"]["amplitude"]
+            * np.sin(v["control_pulses"]["echo"]["phase"] / 180 * np.pi),
+        }
+
+        config["elements"][gate]["operations"][
+            "echo_minus"
+        ] = f"{gate}_echo_minus"
+        config["pulses"][f"{gate}_echo_minus"] = {
+            "operation": "control",
+            "length": round(v["control_pulses"]["echo"]["duration"] * 1e9),
+            "waveforms": {
+                "I": f"{gate}_echo_minus_wf_i",
+                "Q": f"{gate}_echo_minus_wf_q",
+            },
+        }
+        config["waveforms"][f"{gate}_echo_minus_wf_i"] = {
+            "type": "constant",
+            "sample": -1
+            * v["control_pulses"]["echo"]["amplitude"]
+            * np.cos(v["control_pulses"]["echo"]["phase"] / 180 * np.pi),
+        }
+        config["waveforms"][f"{gate}_echo_minus_wf_q"] = {
+            "type": "constant",
+            "sample": -1
+            * v["control_pulses"]["echo"]["amplitude"]
+            * np.sin(v["control_pulses"]["echo"]["phase"] / 180 * np.pi),
+        }
+
+        # cancellation tone on target element
+        config["elements"][f'q{v["target"]}']["operations"][
+            f"{gate}_cancellation_plus"
+        ] = f"{gate}_cancellation_plus"
+        config["pulses"][f"{gate}_cancellation_plus"] = {
+            "operation": "control",
+            "length": round(v["control_pulses"]["echo"]["duration"] * 1e9),
+            "waveforms": {
+                "I": f"{gate}_cancellation_plus_wf_i",
+                "Q": f"{gate}_cancellation_plus_wf_q",
+            },
+        }
+        config["waveforms"][f"{gate}_cancellation_plus_wf_i"] = {
+            "type": "constant",
+            "sample": v["control_pulses"]["cancellation_tone"]["amplitude"]
+            * np.cos(
+                v["control_pulses"]["cancellation_tone"]["phase"] / 180 * np.pi
+            ),
+        }
+        config["waveforms"][f"{gate}_cancellation_plus_wf_q"] = {
+            "type": "constant",
+            "sample": v["control_pulses"]["cancellation_tone"]["amplitude"]
+            * np.sin(
+                v["control_pulses"]["cancellation_tone"]["phase"] / 180 * np.pi
+            ),
+        }
+
+        config["elements"][f'q{v["target"]}']["operations"][
+            f"{gate}_cancellation_minus"
+        ] = f"{gate}_cancellation_minus"
+        config["pulses"][f"{gate}_cancellation_minus"] = {
+            "operation": "control",
+            "length": round(v["control_pulses"]["echo"]["duration"] * 1e9),
+            "waveforms": {
+                "I": f"{gate}_cancellation_minus_wf_i",
+                "Q": f"{gate}_cancellation_minus_wf_q",
+            },
+        }
+        config["waveforms"][f"{gate}_cancellation_minus_wf_i"] = {
+            "type": "constant",
+            "sample": -1
+            * v["control_pulses"]["cancellation_tone"]["amplitude"]
+            * np.cos(
+                v["control_pulses"]["cancellation_tone"]["phase"] / 180 * np.pi
+            ),
+        }
+        config["waveforms"][f"{gate}_cancellation_minus_wf_q"] = {
+            "type": "constant",
+            "sample": -1
+            * v["control_pulses"]["cancellation_tone"]["amplitude"]
+            * np.sin(
+                v["control_pulses"]["cancellation_tone"]["phase"] / 180 * np.pi
+            ),
+        }
+
         config["mixers"][f"mixer_q{v['control']}"].append(
             {
-                "intermediate_frequency": round(state["qubits"][v["target"]]["f_01"])
+                "intermediate_frequency": round(
+                    state["qubits"][v["target"]]["f_01"]
+                )
                 - state["qubits"][v["control"]]["wiring"]["lo_freq"],
-                "lo_frequency": state["qubits"][v["control"]]["wiring"]["lo_freq"],
+                "lo_frequency": state["qubits"][v["control"]]["wiring"][
+                    "lo_freq"
+                ],
                 "correction": v["correction_matrix"],
             }
         )
@@ -438,7 +627,7 @@ def add_control_operation_single(config, element, operation_name, wf):
     config["pulses"][pulse_name] = {
         "operation": "control",
         "length": len(wf),
-        "waveforms": {"single": pulse_name + "_single"},
+        "waveforms": {"I": pulse_name + "_single"},
     }
     config["elements"][element]["operations"][operation_name] = pulse_name
 
@@ -467,7 +656,9 @@ def add_analog_outputs(state, config):
             config["controllers"][o["controller"]] = {}
         if "analog_outputs" not in config["controllers"][o["controller"]]:
             config["controllers"][o["controller"]]["analog_outputs"] = {}
-        config["controllers"][o["controller"]]["analog_outputs"][str(o["output"])] = {"offset": o["offset"]}
+        config["controllers"][o["controller"]]["analog_outputs"][
+            str(o["output"])
+        ] = {"offset": o["offset"]}
 
 
 def add_analog_inputs(state, config):
@@ -476,7 +667,9 @@ def add_analog_inputs(state, config):
             config["controllers"][i["controller"]] = {}
         if "analog_inputs" not in config["controllers"][i["controller"]]:
             config["controllers"][i["controller"]]["analog_inputs"] = {}
-        config["controllers"][i["controller"]]["analog_inputs"][str(i["input"])] = {
+        config["controllers"][i["controller"]]["analog_inputs"][
+            str(i["input"])
+        ] = {
             "offset": i["offset"],
             "gain_db": i["gain_db"],
         }
@@ -490,13 +683,19 @@ def add_analog_waveforms(state, config):
                     f'Constant analog waveform {state["name"]} has to have samples length of 1 (currently {len(wf["samples"])})'
                 )
 
-            config["waveforms"][wf["name"]] = {"type": wf["type"], "sample": wf["samples"][0]}
+            config["waveforms"][wf["name"]] = {
+                "type": wf["type"],
+                "sample": wf["samples"][0],
+            }
         else:
             if len(wf["samples"]) <= 1:
                 raise ValueError(
                     f'Analog waveform {state["name"]} has single sample, and should be then of type "constant" instead of {wf["type"]}.'
                 )
-            config["waveforms"][wf["name"]] = {"type": wf["type"], "samples": wf["samples"]}
+            config["waveforms"][wf["name"]] = {
+                "type": wf["type"],
+                "samples": wf["samples"],
+            }
 
 
 def add_digital_waveforms(state, config):
@@ -557,14 +756,20 @@ def build_config(state):
                     q,
                     single_qubit_operation["angle"],
                     single_qubit_operation["direction"],
-                    state["qubits"][q]["driving"]["angle2volt"][str(abs(single_qubit_operation["angle"]))]
+                    state["qubits"][q]["driving"]["angle2volt"][
+                        str(abs(single_qubit_operation["angle"]))
+                    ]
                     * gaussian(
                         round(state["qubits"][q]["driving"]["gate_len"] * 1e9),
-                        round(state["qubits"][q]["driving"]["gate_sigma"] * 1e9),
+                        round(
+                            state["qubits"][q]["driving"]["gate_sigma"] * 1e9
+                        ),
                     ),
                 )  # +180 and -180 have same amplitude
             else:
-                raise ValueError(f'Gate shape {state["qubits"][q]["driving"]["gate_shape"]} not recognized.')
+                raise ValueError(
+                    f'Gate shape {state["qubits"][q]["driving"]["gate_shape"]} not recognized.'
+                )
 
     add_cross_resonance_gates(state, config)
     return config
