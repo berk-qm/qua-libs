@@ -186,8 +186,9 @@ state = {
         {"direction": "y", "angle": 90},
         {"direction": "y", "angle": -90},
     ],
-    "two_qubit_gates": {
-        "cr_c0t1": {
+    "two_qubit_gates": [
+        {
+            "name": "cr_c0t1",
             "control": 0,
             "target": 1,
             "gate_time": None,
@@ -217,7 +218,8 @@ state = {
                 "zz": None,
             },
         },
-        "cr_c1t0": {
+        {
+            "name": "cr_c1t0",
             "control": 1,
             "target": 0,
             "gate_time": None,
@@ -247,7 +249,7 @@ state = {
                 "zz": None,
             },
         },
-    },
+    ],
     "running strategy": {"running": True, "start": [], "end": []},
 }
 
@@ -460,7 +462,8 @@ def add_qb_rot(
 
 
 def add_cross_resonance_gates(state, config):
-    for gate, v in state["two_qubit_gates"].items():
+    for v in state["two_qubit_gates"]:
+        gate = v["name"]
         config["elements"][gate] = {
             "mixInputs": {
                 "I": (
@@ -500,7 +503,7 @@ def add_cross_resonance_gates(state, config):
         }
         config["waveforms"][f"{gate}_simple_wf_q"] = {
             "type": "constant",
-            "sample": -v["control_pulses"]["simple"]["amplitude"]
+            "sample": v["control_pulses"]["simple"]["amplitude"]
             * np.sin(v["control_pulses"]["simple"]["phase"] / 180 * np.pi),
         }
 
@@ -523,7 +526,7 @@ def add_cross_resonance_gates(state, config):
         }
         config["waveforms"][f"{gate}_echo_plus_wf_q"] = {
             "type": "constant",
-            "sample": -v["control_pulses"]["echo"]["amplitude"]
+            "sample": v["control_pulses"]["echo"]["amplitude"]
             * np.sin(v["control_pulses"]["echo"]["phase"] / 180 * np.pi),
         }
 
@@ -546,7 +549,8 @@ def add_cross_resonance_gates(state, config):
         }
         config["waveforms"][f"{gate}_echo_minus_wf_q"] = {
             "type": "constant",
-            "sample": v["control_pulses"]["echo"]["amplitude"]
+            "sample": -1
+            * v["control_pulses"]["echo"]["amplitude"]
             * np.sin(v["control_pulses"]["echo"]["phase"] / 180 * np.pi),
         }
 
@@ -571,7 +575,7 @@ def add_cross_resonance_gates(state, config):
         }
         config["waveforms"][f"{gate}_cancellation_plus_wf_q"] = {
             "type": "constant",
-            "sample": -v["control_pulses"]["cancellation_tone"]["amplitude"]
+            "sample": v["control_pulses"]["cancellation_tone"]["amplitude"]
             * np.sin(
                 v["control_pulses"]["cancellation_tone"]["phase"] / 180 * np.pi
             ),
@@ -598,7 +602,8 @@ def add_cross_resonance_gates(state, config):
         }
         config["waveforms"][f"{gate}_cancellation_minus_wf_q"] = {
             "type": "constant",
-            "sample": v["control_pulses"]["cancellation_tone"]["amplitude"]
+            "sample": -1
+            * v["control_pulses"]["cancellation_tone"]["amplitude"]
             * np.sin(
                 v["control_pulses"]["cancellation_tone"]["phase"] / 180 * np.pi
             ),
