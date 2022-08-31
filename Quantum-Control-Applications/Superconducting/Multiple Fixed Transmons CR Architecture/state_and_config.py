@@ -32,7 +32,7 @@ def IQ_imbalance(g, phi):
 
 
 # layer 1: bare state
-state = {
+quam = {
     "analog_outputs": [
         {
             "controller": "con1",
@@ -254,9 +254,9 @@ state = {
 }
 
 
-def add_qubits(state: Dict, config: Dict):
-    for q in range(len(state["qubits"])):
-        wiring = state["qubits"][q]["wiring"]
+def add_qubits(quam: Dict, config: Dict):
+    for q in range(len(quam["qubits"])):
+        wiring = quam["qubits"][q]["wiring"]
         config["elements"][f"q{q}"] = {
             "mixInputs": {
                 "I": (wiring["I"][0], wiring["I"][1]),
@@ -264,7 +264,7 @@ def add_qubits(state: Dict, config: Dict):
                 "lo_frequency": wiring["lo_freq"],
                 "mixer": f"mixer_q{q}",
             },
-            "intermediate_frequency": round(state["qubits"][q]["f_01"])
+            "intermediate_frequency": round(quam["qubits"][q]["f_01"])
             - wiring["lo_freq"],
             "operations": {
                 "cw": "const_pulse",
@@ -275,7 +275,7 @@ def add_qubits(state: Dict, config: Dict):
             config["mixers"][f"mixer_q{q}"] = []
         config["mixers"][f"mixer_q{q}"].append(
             {
-                "intermediate_frequency": round(state["qubits"][q]["f_01"])
+                "intermediate_frequency": round(quam["qubits"][q]["f_01"])
                 - wiring["lo_freq"],
                 "lo_frequency": wiring["lo_freq"],
                 "correction": wiring["correction_matrix"],
@@ -283,9 +283,9 @@ def add_qubits(state: Dict, config: Dict):
         )
 
 
-def add_readout_resonators(state, config):
-    for r, v in enumerate(state["readout_resonators"]):  # r - idx, v - value
-        readout_line = state["readout_lines"][v["wiring"]["readout_line_index"]]
+def add_readout_resonators(quam, config):
+    for r, v in enumerate(quam["readout_resonators"]):  # r - idx, v - value
+        readout_line = quam["readout_lines"][v["wiring"]["readout_line_index"]]
 
         config["elements"][f"rr{r}"] = {
             "mixInputs": {
@@ -380,7 +380,7 @@ def add_readout_resonators(state, config):
 
 
 def add_qb_rot(
-    state: Dict,
+    quam: Dict,
     config: Dict,
     q: int,
     angle: int,
@@ -391,7 +391,7 @@ def add_qb_rot(
     """Add single qubit operation
 
     Args:
-        state (Dict): state of the system
+        quam (Dict): state of the system
         config (Dict): OPX config we are building/editing
         q (int): index of qubit to whom we are adding operation
         angle (int): angle in degrees
@@ -403,9 +403,9 @@ def add_qb_rot(
         raise ValueError(
             f"Only x and y are accepted directions, received {direction}"
         )
-    if q >= len(state["qubits"]):
+    if q >= len(quam["qubits"]):
         raise ValueError(
-            f"Qubit {q} is not configured in state. Please add qubit q first."
+            f"Qubit {q} is not configured in quam. Please add qubit q first."
         )
     if type(angle) != int:
         raise ValueError("Only integers are accepted as angle.")
@@ -461,8 +461,8 @@ def add_qb_rot(
     ] = f"{direction}{angle}_pulse_q{q}"
 
 
-def add_cross_resonance_gates(state, config):
-    for v in state["two_qubit_gates"]:
+def add_cross_resonance_gates(quam, config):
+    for v in quam["two_qubit_gates"]:
         gate = v["name"]
         config["elements"][gate] = {
             "mixInputs": {
@@ -480,9 +480,9 @@ def add_cross_resonance_gates(state, config):
                 "mixer": f'mixer_q{v["control"]}',
             },
             "intermediate_frequency": round(
-                state["qubits"][v["target"]]["f_01"]
+                quam["qubits"][v["target"]]["f_01"]
             )
-            - state["qubits"][v["control"]]["wiring"]["lo_freq"],
+            - quam["qubits"][v["control"]]["wiring"]["lo_freq"],
             "operations": {},
         }
 
@@ -612,10 +612,10 @@ def add_cross_resonance_gates(state, config):
         config["mixers"][f"mixer_q{v['control']}"].append(
             {
                 "intermediate_frequency": round(
-                    state["qubits"][v["target"]]["f_01"]
+                    quam["qubits"][v["target"]]["f_01"]
                 )
-                - state["qubits"][v["control"]]["wiring"]["lo_freq"],
-                "lo_frequency": state["qubits"][v["control"]]["wiring"][
+                - quam["qubits"][v["control"]]["wiring"]["lo_freq"],
+                "lo_frequency": quam["qubits"][v["control"]]["wiring"][
                     "lo_freq"
                 ],
                 "correction": v["correction_matrix"],
@@ -655,8 +655,8 @@ def add_control_operation_iq(config, element, operation_name, wf_i, wf_q):
     config["elements"][element]["operations"][operation_name] = pulse_name
 
 
-def add_analog_outputs(state, config):
-    for o in state["analog_outputs"]:
+def add_analog_outputs(quam, config):
+    for o in quam["analog_outputs"]:
         if o["controller"] not in config["controllers"]:
             config["controllers"][o["controller"]] = {}
         if "analog_outputs" not in config["controllers"][o["controller"]]:
@@ -666,8 +666,8 @@ def add_analog_outputs(state, config):
         ] = {"offset": o["offset"]}
 
 
-def add_analog_inputs(state, config):
-    for i in state["analog_inputs"]:
+def add_analog_inputs(quam, config):
+    for i in quam["analog_inputs"]:
         if i["controller"] not in config["controllers"]:
             config["controllers"][i["controller"]] = {}
         if "analog_inputs" not in config["controllers"][i["controller"]]:
@@ -680,8 +680,8 @@ def add_analog_inputs(state, config):
         }
 
 
-def add_analog_waveforms(state, config):
-    for wf in state["analog_waveforms"]:
+def add_analog_waveforms(quam, config):
+    for wf in quam["analog_waveforms"]:
         if wf["type"] == "constant":
             if len(wf["samples"]) != 1:
                 raise ValueError(
@@ -703,13 +703,13 @@ def add_analog_waveforms(state, config):
             }
 
 
-def add_digital_waveforms(state, config):
-    for wf in state["digital_waveforms"]:
+def add_digital_waveforms(quam, config):
+    for wf in quam["digital_waveforms"]:
         config["digital_waveforms"][wf["name"]] = {"samples": wf["samples"]}
 
 
-def add_pulses(state, config):
-    for pulse in state["pulses"]:
+def add_pulses(quam, config):
+    for pulse in quam["pulses"]:
         config["pulses"][pulse["name"]] = {
             "operation": pulse["operation"],
             "length": pulse["length"],
@@ -720,7 +720,7 @@ def add_pulses(state, config):
         }
 
 
-def build_config(state):
+def build_config(quam):
     config = {
         "version": 1,
         "controllers": {
@@ -738,50 +738,50 @@ def build_config(state):
         "mixers": {},
     }
 
-    add_analog_outputs(state, config)
+    add_analog_outputs(quam, config)
 
-    add_analog_inputs(state, config)
+    add_analog_inputs(quam, config)
 
-    add_analog_waveforms(state, config)
+    add_analog_waveforms(quam, config)
 
-    add_digital_waveforms(state, config)
+    add_digital_waveforms(quam, config)
 
-    add_pulses(state, config)
+    add_pulses(quam, config)
 
-    add_qubits(state, config)
+    add_qubits(quam, config)
 
-    add_readout_resonators(state, config)
+    add_readout_resonators(quam, config)
 
-    for single_qubit_operation in state["single_qubit_operations"]:
-        for q in range(len(state["qubits"])):
-            if state["qubits"][q]["driving"]["gate_shape"] == "gaussian":
+    for single_qubit_operation in quam["single_qubit_operations"]:
+        for q in range(len(quam["qubits"])):
+            if quam["qubits"][q]["driving"]["gate_shape"] == "gaussian":
                 add_qb_rot(
-                    state,
+                    quam,
                     config,
                     q,
                     single_qubit_operation["angle"],
                     single_qubit_operation["direction"],
-                    state["qubits"][q]["driving"]["angle2volt"][
+                    quam["qubits"][q]["driving"]["angle2volt"][
                         str(abs(single_qubit_operation["angle"]))
                     ]
                     * gaussian(
-                        round(state["qubits"][q]["driving"]["gate_len"] * 1e9),
+                        round(quam["qubits"][q]["driving"]["gate_len"] * 1e9),
                         round(
-                            state["qubits"][q]["driving"]["gate_sigma"] * 1e9
+                            quam["qubits"][q]["driving"]["gate_sigma"] * 1e9
                         ),
                     ),
                 )  # +180 and -180 have same amplitude
             else:
                 raise ValueError(
-                    f'Gate shape {state["qubits"][q]["driving"]["gate_shape"]} not recognized.'
+                    f'Gate shape {quam["qubits"][q]["driving"]["gate_shape"]} not recognized.'
                 )
 
-    add_cross_resonance_gates(state, config)
+    add_cross_resonance_gates(quam, config)
     return config
 
 
 def generate_bootstrap_state():
-    config = build_config(state)
+    config = build_config(quam)
     # from qm.QuantumMachinesManager import QuantumMachinesManager
     # qmm = QuantumMachinesManager(host="172.16.2.103", port=82)
     # qm = qmm.open_qm(config)
@@ -789,7 +789,7 @@ def generate_bootstrap_state():
     import json
 
     with open("bootstrap_state.json", "w") as fp:
-        json.dump(state, fp, indent=2)
+        json.dump(quam, fp, indent=2)
 
     class NumpyEncoder(json.JSONEncoder):
         def default(self, obj):
@@ -798,8 +798,8 @@ def generate_bootstrap_state():
             return json.JSONEncoder.default(self, obj)
 
     with open("configuration_parsed.json", "w") as fp:
-        json.dump(build_config(state), fp, cls=NumpyEncoder, indent=2)
-        # convert_file.write(json.dumps(build_config(state)))
+        json.dump(build_config(quam), fp, cls=NumpyEncoder, indent=2)
+        # convert_file.write(json.dumps(build_config(quam)))
 
 
 if __name__ == "__main__":
