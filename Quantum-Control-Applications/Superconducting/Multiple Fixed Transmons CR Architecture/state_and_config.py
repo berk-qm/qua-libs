@@ -685,7 +685,7 @@ def add_analog_waveforms(state, config):
         if wf["type"] == "constant":
             if len(wf["samples"]) != 1:
                 raise ValueError(
-                    f'Constant analog waveform {state["name"]} has to have samples length of 1 (currently {len(wf["samples"])})'
+                    f'Constant analog waveform {wf["name"]} has to have samples length of 1 (currently {len(wf["samples"])})'
                 )
 
             config["waveforms"][wf["name"]] = {
@@ -695,7 +695,7 @@ def add_analog_waveforms(state, config):
         else:
             if len(wf["samples"]) <= 1:
                 raise ValueError(
-                    f'Analog waveform {state["name"]} has single sample, and should be then of type "constant" instead of {wf["type"]}.'
+                    f'Analog waveform {wf["name"]} has single sample, and should be then of type "constant" instead of {wf["type"]}.'
                 )
             config["waveforms"][wf["name"]] = {
                 "type": wf["type"],
