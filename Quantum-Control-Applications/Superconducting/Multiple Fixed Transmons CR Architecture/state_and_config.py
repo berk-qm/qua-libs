@@ -96,6 +96,7 @@ quam = {
         {
             "length": 2e-6,  # Sec
             "lo_freq": 6.57e9,
+            "lo_power": 15,  # dBm
         }
     ],
     "readout_resonators": [
@@ -150,6 +151,7 @@ quam = {
             },
             "wiring": {
                 "lo_freq": 4.59e9,
+                "lo_power": 11,  # dBm
                 "I": ["con1", 1],
                 "Q": ["con1", 2],
                 "correction_matrix": IQ_imbalance(0, 0),
@@ -170,6 +172,7 @@ quam = {
             },
             "wiring": {
                 "lo_freq": 4.72e9,
+                "lo_power": 18,  # dBm
                 "I": ["con1", 3],
                 "Q": ["con1", 4],
                 "correction_matrix": IQ_imbalance(0, 0),
