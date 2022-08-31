@@ -406,7 +406,7 @@ def add_qb_rot(
         )
     if q >= len(quam["qubits"]):
         raise ValueError(
-            f"Qubit {q} is not configured in quam. Please add qubit q first."
+            f"Qubit {q} is not configured in quam. Please add qubit {q} first."
         )
     if type(angle) != int:
         raise ValueError("Only integers are accepted as angle.")
