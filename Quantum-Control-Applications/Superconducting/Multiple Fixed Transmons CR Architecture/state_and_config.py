@@ -424,7 +424,7 @@ def add_qb_rot(
     wv = np.sign(angle) * (
         wf_I * np.cos(direction_angle) - wf_Q * np.sin(direction_angle)
     )
-    if np.all((wv == 0)):
+    if np.all((wv == wv[0])):
         config["waveforms"][f"{direction}{angle}_I_wf_q{q}"] = {
             "type": "constant"
         }
@@ -438,7 +438,7 @@ def add_qb_rot(
     wv = np.sign(angle) * (
         wf_I * np.sin(direction_angle) + wf_Q * np.cos(direction_angle)
     )
-    if np.all((wv == 0)):
+    if np.all((wv == wv[0])):
         config["waveforms"][f"{direction}{angle}_Q_wf_q{q}"] = {
             "type": "constant"
         }
