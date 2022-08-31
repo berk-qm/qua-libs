@@ -428,7 +428,7 @@ def add_qb_rot(
         config["waveforms"][f"{direction}{angle}_I_wf_q{q}"] = {
             "type": "constant"
         }
-        config["waveforms"][f"{direction}{angle}_I_wf_q{q}"]["sample"] = 0
+        config["waveforms"][f"{direction}{angle}_I_wf_q{q}"]["sample"] = wv[0]
     else:
         config["waveforms"][f"{direction}{angle}_I_wf_q{q}"] = {
             "type": "arbitrary"
@@ -442,7 +442,7 @@ def add_qb_rot(
         config["waveforms"][f"{direction}{angle}_Q_wf_q{q}"] = {
             "type": "constant"
         }
-        config["waveforms"][f"{direction}{angle}_Q_wf_q{q}"]["sample"] = 0
+        config["waveforms"][f"{direction}{angle}_Q_wf_q{q}"]["sample"] = wv[0]
     else:
         config["waveforms"][f"{direction}{angle}_Q_wf_q{q}"] = {
             "type": "arbitrary"
