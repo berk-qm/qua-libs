@@ -97,6 +97,8 @@ quam = {
             "length": 2e-6,  # Sec
             "lo_freq": 6.57e9,
             "lo_power": 15,  # dBm
+            "I_down": ["con1", 9],  # Down-conversion channels
+            "Q_down": ["con1", 10],
         }
     ],
     "readout_resonators": [
@@ -112,8 +114,6 @@ quam = {
             "wiring": {
                 "readout_line_index": 0,
                 "time_of_flight": 260,
-                "I": ["con1", 9],
-                "Q": ["con1", 10],
                 "correction_matrix": IQ_imbalance(0, 0),
             },
         },
@@ -129,8 +129,6 @@ quam = {
             "wiring": {
                 "readout_line_index": 0,
                 "time_of_flight": 260,
-                "I": ["con1", 9],
-                "Q": ["con1", 10],
                 "correction_matrix": IQ_imbalance(0, 0),
             },
         },
@@ -292,8 +290,8 @@ def add_readout_resonators(quam, config):
 
         config["elements"][f"rr{r}"] = {
             "mixInputs": {
-                "I": (v["wiring"]["I"][0], v["wiring"]["I"][1]),
-                "Q": (v["wiring"]["Q"][0], v["wiring"]["Q"][1]),
+                "I": (readout_line["I_down"][0], readout_line["I_down"][1]),
+                "Q": (readout_line["Q_down"][0], readout_line["Q_down"][1]),
                 "lo_frequency": round(readout_line["lo_freq"]),
                 "mixer": "mixer_rr",
             },
