@@ -4,8 +4,7 @@ resonator_spec.py: performs 1D resonator spectroscopy for multiple qubits
 import matplotlib
 
 matplotlib.use("TKagg")
-from state_and_config import build_config, state
-from qm.QuantumMachinesManager import QuantumMachinesManager
+from state_and_config import build_config, quam
 from qm.simulate.credentials import create_credentials
 from qm.simulate import SimulationConfig
 from qm.qua import *
@@ -14,15 +13,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy import signal
 from qualang_tools.units import unit
+from qualang_tools.results import fetching_tool
 
 ###################
 # The QUA program #
 ###################
+u = unit()
 
 qubits = [0, 1]
-n_avg = 1
-u = unit()
-cooldown_time = 10 * u.us // 4
+n_avg = 4
+cooldown_time = 16 * u.ns // 4
+
+f_center = [round(quam["readout_resonators"][q]["f_res"] - quam["readout_lines"][0]["lo_freq"]) for q in qubits]
+f_span = 1 * u.MHz
+df = 1 * u.MHz
+n_points = (2 * f_span + df) // df
 
 with program() as resonator_spec:
     n = declare(int)
@@ -35,27 +40,10 @@ with program() as resonator_spec:
     idx = 0
     for q in qubits:
         align()
-        f_min = (
-            round(
-                state["readout_resonators"][q]["f_res"]
-                - state["readout_lo_freq"]
-            )
-            - 10e6
-        )
-        f_max = (
-            round(
-                state["readout_resonators"][q]["f_res"]
-                - state["readout_lo_freq"]
-            )
-            + 10e6
-        )
-        df = 30e6
-        freqs = np.arange(f_min, f_max + 0.1, df)  # + 0.1 to add f_max to freqs
 
         with for_(n, 0, n < n_avg, n + 1):
-            with for_(
-                f, f_min, f <= f_max, f + df
-            ):  # Notice it's <= to include f_max (This is only for integers!)
+            # Notice it's <= to include f_max (This is only for integers!)
+            with for_(f, f_center[q] - f_span, f <= f_center[q] + f_span, f + df):
                 update_frequency(f"rr{q}", f)
                 measure(
                     "readout",
@@ -72,8 +60,8 @@ with program() as resonator_spec:
 
     with stream_processing():
         for idx in range(len(qubits)):
-            I_st[idx].buffer(len(freqs)).average().save(f"I_q{qubits[idx]}")
-            Q_st[idx].buffer(len(freqs)).average().save(f"Q_q{qubits[idx]}")
+            I_st[idx].buffer(n_points).average().save(f"I_q{qubits[idx]}")
+            Q_st[idx].buffer(n_points).average().save(f"Q_q{qubits[idx]}")
 
 #####################################
 #  Open Communication with the QOP  #
@@ -89,7 +77,7 @@ qmm = QuantumMachinesManager(
 #######################
 
 simulate = True
-config = build_config(state)
+config = build_config(quam)
 
 if simulate:
     simulation_config = SimulationConfig(duration=20000)
@@ -101,53 +89,43 @@ else:
     job = qm.execute(resonator_spec)
 
 # Get results from QUA program
-res_handles = job.result_handles
-# res_handles.wait_for_all_values()
-# I = res_handles.get(f"I_q{q}").fetch_all()
+data_list = sum([[f"I_q{q}", f"Q_q{q}"] for q in range(len(qubits))], [])
+results = fetching_tool(job, data_list, mode="live")
 
-fig, axs = plt.subplots(len(qubits), 2)
-first_plot = True
-ploted_data = []
+# Plot results
+fig, axs = plt.subplots(2, len(qubits))
+plotted_data = []
+x_axis = []
 for q in range(len(qubits)):
-    ax = axs[q, 0]
+    ax = axs[0, q]
     ax.set_title(f"rr{q} spectroscopy amplitude")
     ax.set_xlabel("frequency [MHz]")
     ax.set_ylabel(r"$\sqrt{I^2 + Q^2}$ [a.u.]")
-    ploted_data.append(None)
-    ax = axs[q, 1]
+    plotted_data.append(None)
+    ax = axs[1, q]
     ax.set_title(f"rr{q} spectroscopy phase")
     ax.set_xlabel("frequency [MHz]")
     ax.set_ylabel("Phase [rad]")
-    ploted_data.append(None)
-plt.tight_layout()
+    plotted_data.append(None)
+    # Get frequency vector for each qubit
+    x_axis.append(np.arange(f_center[q] - f_span, f_center[q] + f_span + 0.1, df))
 
-while job.result_handles.is_processing() or first_plot:
+# Live plot
+while results.is_processing():
+    # Fetch results
+    data = results.fetch_all()
     for q in range(len(qubits)):
-        if (
-            res_handles.get(f"I_q{q}").count_so_far()
-            * res_handles.get(f"Q_q{q}").count_so_far()
-            != 0
-        ):
-            I = res_handles.get(f"I_q{q}").fetch_all()
-            Q = res_handles.get(f"Q_q{q}").fetch_all()
-            # Plot results
-            ax = axs[q, 0]
-            if ploted_data[2*q] is not None: ploted_data[2*q].remove()
-            # ax.cla()
-            # ax.set_title(f"rr{q} spectroscopy amplitude")
-            ploted_data[2*q], = ax.plot(freqs / u.MHz, np.sqrt(I**2 + Q**2), ".")
-            # ax.set_xlabel("frequency [MHz]")
-            # ax.set_ylabel(r"$\sqrt{I^2 + Q^2}$ [a.u.]")
-            # detrend removes the linear increase of phase
-            ax = axs[q, 1]
-            # ax.cla()
-            if ploted_data[2 * q+1] is not None: ploted_data[2 * q+1].remove()
-            phase = signal.detrend(np.unwrap(np.angle(I + 1j * Q)))
-            # ax.set_title(f"rr{q} spectroscopy phase")
-            ploted_data[2*q +1], = ax.plot(freqs / u.MHz, phase, ".")
-            # ax.set_xlabel("frequency [MHz]")
-            # ax.set_ylabel("Phase [rad]")
-            # plt.tight_layout()
-
-    first_plot = False
+        # Get I and Q data for each qubit
+        I, Q = data[2 * q], data[2 * q + 1]
+        phase = signal.detrend(np.unwrap(np.angle(I + 1j * Q)))
+        # Plot results
+        ax = axs[0, q]
+        if plotted_data[2 * q] is not None:
+            plotted_data[2 * q].remove()
+        (plotted_data[2 * q],) = ax.plot(x_axis[q] / u.MHz, np.sqrt(I**2 + Q**2), ".")
+        ax = axs[1, q]
+        if plotted_data[2 * q + 1] is not None:
+            plotted_data[2 * q + 1].remove()
+        (plotted_data[2 * q + 1],) = ax.plot(x_axis[q] / u.MHz, phase, ".")
+    plt.tight_layout()
     plt.pause(1.0)
