@@ -79,6 +79,7 @@ def reset_qubit(method, **kwargs):
             raise Exception("'cooldown_time' must be an integer > 4 clock cycles")
         # Reset qubit state
         wait(cooldown_time, "qubit")
+        align()
     elif method == "active":
         # Check threshold
         threshold = kwargs.get("threshold", None)
@@ -287,7 +288,7 @@ class qubit_frequency_tracking:
                     self.state_estimation,
                     self.state_estimation_st[self.state_estimation_st_idx],
                 )
-
+        # TODO this is inconsistent with the main program no?
         self.state_estimation_st_idx = self.state_estimation_st_idx + 1
 
     def time_domain_ramsey_full_sweep_analysis(self, result_handles, stream_name):
@@ -323,7 +324,7 @@ class qubit_frequency_tracking:
 
         :param int n_avg: python integer for the number of averaging loops
         :param f_vec: numpy array of integers for the qubit detuning to be scanned in Hz
-        :param oscillation_number: number of oscillations to capture used to define the idle time as .
+        :param oscillation_number: number of oscillations to capture used to define the idle time.
         :param correct:
         :return:
         """
@@ -388,7 +389,7 @@ class qubit_frequency_tracking:
         plt.legend()
 
     def two_points_ramsey(self):
-
+        # Scale factor to convert amplitude to frequency change
         c = int(1 / (2 * np.pi * self.tau0 * 4e-9 * self.frequency_sweep_amp))
         print(f"c = {c}")
         assign(self.se_vec[0], 0)
@@ -404,6 +405,7 @@ class qubit_frequency_tracking:
                 reset_qubit("cooldown", cooldown_time=1000)
                 ####################################################################################################
                 # Set qubit frequency
+                ## TODO do you take into account the corrected frequency here ?
                 update_frequency(self.qubit, self.f)
                 # Ramsey sequence
                 play("pi2", self.qubit)

@@ -35,6 +35,7 @@ for arg in ["Pe_0", "Pe_corrected"]:
         freq_track_obj.time_domain_ramsey_full_sweep(n_avg, f_det=int(0.06e6), tau_vec=tau_vec)
 
         with stream_processing():
+            # TODO why 0 here and not a counter increment with arg?
             freq_track_obj.state_estimation_st[0].buffer(len(tau_vec)).average().save(arg)
     # Execute the program
     job = qm.execute(prog)
@@ -86,6 +87,7 @@ with program() as prog:
         freq_track_obj.time_domain_ramsey_full_sweep(n_avg, freq_track_obj.f_det, tau_vec, True)
         save(i, i_st)
     with stream_processing():
+        ## TODO if the previous scripts are run then the indexes are wrong no?
         freq_track_obj.state_estimation_st[0].buffer(n_avg, len(tau_vec)).average().save("Pe_td_ref" )
         freq_track_obj.state_estimation_st[1].buffer(n_avg, len(tau_vec)).average().save("Pe_td_corr")
         i_st.save("iteration")
