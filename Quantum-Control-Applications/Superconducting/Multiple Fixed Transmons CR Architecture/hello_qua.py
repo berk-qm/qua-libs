@@ -1,11 +1,11 @@
-from state_and_config import build_config, state
+from state_and_config import build_config, quam
 from qm.QuantumMachinesManager import QuantumMachinesManager
 from qm.simulate.credentials import create_credentials
 from qm.simulate import SimulationConfig
 from qm.qua import *
 
 # build config
-config = build_config(state)
+config = build_config(quam)
 qmm = QuantumMachinesManager(
     host="nord-quantique-d14d58b1.quantum-machines.co",
     port=443,
@@ -47,7 +47,7 @@ with program() as hello_qua:
     for c in [[0, 1], [1, 0]]:
         align()
         wait(10, f"cr_c{c[0]}t{c[1]}")
-        play("cw", f"cr_c{c[0]}t{c[1]}")
+        play("simple", f"cr_c{c[0]}t{c[1]}")
 
     for r in [0, 1]:
 
@@ -62,5 +62,5 @@ with program() as hello_qua:
             dual_demod.full("cos", "out1", "sin", "out2", I),
         )
 
-job = qmm.simulate(build_config(state), hello_qua, SimulationConfig(11000))
+job = qmm.simulate(build_config(quam), hello_qua, SimulationConfig(11000))
 job.get_simulated_samples().con1.plot()

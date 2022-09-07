@@ -1,23 +1,22 @@
-"""
-Performs a 1 qubit randomized benchmarking to measure the 1 qubit gate fidelity. This version is using directly the I
-& Q data and should be used when there is no single-shot readout
-"""
 from qm.qua import *
-from qm.QuantumMachinesManager import QuantumMachinesManager
-from scipy.optimize import curve_fit
 from configuration import *
+from qm.QuantumMachinesManager import QuantumMachinesManager
 import matplotlib.pyplot as plt
 import numpy as np
 from qualang_tools.bakery.randomized_benchmark_c1 import c1_table
+from scipy.optimize import curve_fit
+from qualang_tools.results import fetching_tool, progress_counter
+from qualang_tools.plot import interrupt_on_close
+
 
 inv_gates = [int(np.where(c1_table[i, :] == 0)[0][0]) for i in range(24)]
-max_circuit_depth = int(3 * qubit_T1 / x180_len)
-num_of_sequences = 50
-n_avg = 20000
+# max_circuit_depth = int(3 * qubit_T1 / x180_len)
+max_circuit_depth = 700
+delta_depth = 1  # must be 1!!
+num_of_sequences = 75
+n_avg = 100
 seed = 345324
 cooldown_time = 5 * qubit_T1 // 4
-
-qmm = QuantumMachinesManager(qop_ip)
 
 
 def generate_sequence():
@@ -115,118 +114,139 @@ def play_sequence(sequence_list, depth):
                 play("-x90", "qubit")
 
 
+resonator_cooldown = 500
+
 with program() as rb:
     depth = declare(int)
     saved_gate = declare(int)
     m = declare(int)
     n = declare(int)
-    n_st = declare_stream()
+    res = declare(bool)
+    res_st = declare_stream()
     I = declare(fixed)
     Q = declare(fixed)
-    I_st = declare_stream()
+    state = declare(bool)
+    state_st = declare_stream()
+    n_st = declare_stream()
     Q_st = declare_stream()
+    I_st = declare_stream()
+    I_g = declare(fixed)
 
-    with for_(n, 0, n < n_avg, n + 1):
-        with for_(m, 0, m < num_of_sequences, m + 1):
-            sequence_list, inv_gate_list = generate_sequence()
+    with for_(m, 0, m < num_of_sequences, m + 1):
+        sequence_list, inv_gate_list = generate_sequence()
+        save(m, n_st)
 
-            with for_(depth, 1, depth <= max_circuit_depth, depth + 1):
+        with for_(depth, 1, depth <= max_circuit_depth, depth + delta_depth):
+            with for_(n, 0, n < n_avg, n + 1):
                 # Replacing the last gate in the sequence with the sequence's inverse gate
                 # The original gate is saved in 'saved_gate' and is being restored at the end
                 assign(saved_gate, sequence_list[depth])
                 assign(sequence_list[depth], inv_gate_list[depth - 1])
 
-                wait(cooldown_time, "resonator")
+                # qubit cooldown based on state discrimination
+                measure(
+                    "readout", "resonator", None, dual_demod.full("rotated_cos", "out1", "rotated_sin", "out2", I_g)
+                )
+                # To prepare the ground state we used -0.0003 which is a more strict threshold (3 sigma)
+                # to guarantee higher ground state fidelity
+                with while_(I_g > -0.0003):
+                    measure(
+                        "readout", "resonator", None, dual_demod.full("rotated_cos", "out1", "rotated_sin", "out2", I_g)
+                    )
+                align()
+                wait(resonator_cooldown)
 
                 align("resonator", "qubit")
 
                 play_sequence(sequence_list, depth)
                 align("qubit", "resonator")
-                measure(
-                    "readout",
-                    "resonator",
-                    None,
-                    dual_demod.full("cos", "out1", "sin", "out2", I),
-                    dual_demod.full("minus_sin", "out1", "cos", "out2", Q),
-                )
+                # Make sure you updated the ge_threshold
+                state, I, Q = readout_macro(threshold=ge_threshold, state=state, I=I, Q=Q)
 
-                save(I, I_st)
+                save(state, state_st)
                 save(Q, Q_st)
+                save(I, I_st)
 
                 assign(sequence_list[depth], saved_gate)
-        save(n, n_st)
 
     with stream_processing():
-        I_st.buffer(max_circuit_depth).buffer(num_of_sequences).average().save("I")
-        Q_st.buffer(max_circuit_depth).buffer(num_of_sequences).average().save("Q")
         n_st.save("iteration")
+        state_st.boolean_to_int().buffer(n_avg).map(FUNCTIONS.average()).buffer(
+            num_of_sequences, max_circuit_depth
+        ).save("res")
+        Q_st.buffer(n_avg).map(FUNCTIONS.average()).buffer(num_of_sequences, max_circuit_depth).save("Q")
+        I_st.buffer(n_avg).map(FUNCTIONS.average()).buffer(num_of_sequences, max_circuit_depth).save("I")
 
-qm = qmm.open_qm(config)
-
+#####################################
+#  Open Communication with the QOP  #
+#####################################
+qmm = QuantumMachinesManager(host="192.168.88.10", port="80")
+# Open quantum machine
+qm = qmm.open_qm(config, close_other_machines=False)
+# Execute QUA program
 job = qm.execute(rb)
-
 # Get results from QUA program
-results = fetching_tool(job, data_list=["I", "Q", "iteration"], mode="live")
+results = fetching_tool(job, data_list=["state", "iteration"], mode="live")
 # Live plotting
 fig = plt.figure()
 interrupt_on_close(fig, job)  # Interrupts the job when closing the figure
 
-x = np.linspace(1, max_circuit_depth, max_circuit_depth)
 while results.is_processing():
     # Fetch results
-    I, Q, iteration = results.fetch_all()
+    state, iteration = results.fetch_all()
     # Progress bar
     progress_counter(iteration, n_avg, start_time=results.get_start_time())
     # Plot results
+    value = 1 - np.average(state, axis=0)
     plt.cla()
-    plt.plot(x, np.average(I, axis=0), ".", label="I")
-    plt.plot(x, np.average(Q, axis=0), ".", label="Q")
+    plt.plot(value)
     plt.xlabel("Number of cliffords")
-    plt.legend()
-    plt.pause(0.1)
+    plt.ylabel("Sequence Fidelity")
 
 
 def power_law(m, a, b, p):
     return a * (p**m) + b
 
 
-for data in [I, Q]:
-    value = np.average(data, axis=0)  # Can change to Q
-    error = np.std(data, axis=0)
-    pars, cov = curve_fit(
-        f=power_law,
-        xdata=x,
-        ydata=value,
-        p0=[0.5, 0.5, 0.9],
-        bounds=(-np.inf, np.inf),
-        maxfev=2000,
-    )
-    plt.figure()
-    plt.errorbar(x, value, yerr=error, marker=".")
-    plt.plot(x, power_law(x, *pars), linestyle="--", linewidth=2)
+x = np.linspace(1, max_circuit_depth, max_circuit_depth)
+plt.xlabel("Number of cliffords")
+plt.ylabel("Sequence Fidelity")
 
-    stdevs = np.sqrt(np.diag(cov))
+pars, cov = curve_fit(
+    f=power_law,
+    xdata=x,
+    ydata=value,
+    p0=[0.5, 0.5, 0.9],
+    bounds=(-np.inf, np.inf),
+    maxfev=2000,
+)
 
-    print("#########################")
-    print("### Fitted Parameters ###")
-    print("#########################")
-    print(f"A = {pars[0]:.3} ({stdevs[0]:.1}), B = {pars[1]:.3} ({stdevs[1]:.1}), p = {pars[2]:.3} ({stdevs[2]:.1})")
-    print("Covariance Matrix")
-    print(cov)
+plt.plot(x, power_law(x, *pars), linestyle="--", linewidth=2)
 
-    one_minus_p = 1 - pars[2]
-    r_c = one_minus_p * (1 - 1 / 2**1)
-    r_g = r_c / 1.875  # 1.875 is the average number of gates in clifford operation
-    r_c_std = stdevs[2] * (1 - 1 / 2**1)
-    r_g_std = r_c_std / 1.875
+stdevs = np.sqrt(np.diag(cov))
 
-    print("#########################")
-    print("### Useful Parameters ###")
-    print("#########################")
-    print(
-        f"Error rate: 1-p = {np.format_float_scientific(one_minus_p, precision=2)} ({stdevs[2]:.1})\n"
-        f"Clifford set infidelity: r_c = {np.format_float_scientific(r_c, precision=2)} ({r_c_std:.1})\n"
-        f"Gate infidelity: r_g = {np.format_float_scientific(r_g, precision=2)}  ({r_g_std:.1})"
-    )
+print("#########################")
+print("### Fitted Parameters ###")
+print("#########################")
+print(f"A = {pars[0]:.3} ({stdevs[0]:.1}), B = {pars[1]:.3} ({stdevs[1]:.1}), p = {pars[2]:.3} ({stdevs[2]:.1})")
+print("Covariance Matrix")
+print(cov)
 
-    np.savez("rb_values", value)
+one_minus_p = 1 - pars[2]
+r_c = one_minus_p * (1 - 1 / 2**1)
+r_g = r_c / 1.875  # 1.875 is the average number of gates in clifford operation
+r_c_std = stdevs[2] * (1 - 1 / 2**1)
+r_g_std = r_c_std / 1.875
+
+print("#########################")
+print("### Useful Parameters ###")
+print("#########################")
+print(
+    f"Error rate: 1-p = {np.format_float_scientific(one_minus_p, precision=2)} ({stdevs[2]:.1})\n"
+    f"Clifford set infidelity: r_c = {np.format_float_scientific(r_c, precision=2)} ({r_c_std:.1})\n"
+    f"Gate infidelity: r_g = {np.format_float_scientific(r_g, precision=2)}  ({r_g_std:.1})"
+)
+
+np.savez("rb_values", value)
+
+qm.close()

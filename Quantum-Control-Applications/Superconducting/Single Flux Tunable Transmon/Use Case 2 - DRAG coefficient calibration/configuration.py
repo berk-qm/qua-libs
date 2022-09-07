@@ -1,9 +1,8 @@
 import numpy as np
+from qm.qua import declare, fixed, measure, dual_demod, assign
 from scipy.signal.windows import gaussian
-from qualang_tools.config.waveform_tools import drag_gaussian_pulse_waveforms
-from qualang_tools.units import unit
-from qualang_tools.plot import interrupt_on_close
-from qualang_tools.results import progress_counter, fetching_tool
+from qualang_tools.config.waveform_tools import drag_gaussian_pulse_waveforms, drag_cosine_pulse_waveforms
+
 
 #######################
 # AUXILIARY FUNCTIONS #
@@ -25,141 +24,160 @@ def IQ_imbalance(g, phi):
     return [float(N * x) for x in [(1 - g) * c, (1 + g) * s, (1 - g) * s, (1 + g) * c]]
 
 
+# Readout macro
+def readout_macro(threshold=None, state=None, I=None, Q=None):
+    """
+    A macro for performing the readout, with the ability to perform state discrimination.
+    If `threshold` is given, the information in the `I` quadrature will be compared against the threshold and `state`
+    would be `True` if `I > threshold`.
+    Note that it is assumed that the results are rotated such that all the information is in the `I` quadrature.
+
+    :param threshold: Optional. The threshold to compare `I` against.
+    :param state: A QUA variable for the state information, only used when a threshold is given.
+        Should be of type `bool`. If not given, a new variable will be created
+    :param I: A QUA variable for the information in the `I` quadrature. Should be of type `Fixed`. If not given, a new
+        variable will be created
+    :param Q: A QUA variable for the information in the `Q` quadrature. Should be of type `Fixed`. If not given, a new
+        variable will be created
+    :return: Three QUA variables populated with the results of the readout: (`state`, `I`, `Q`)
+    """
+    if I is None:
+        I = declare(fixed)
+    if Q is None:
+        Q = declare(fixed)
+    if threshold is not None and state is None:
+        state = declare(bool)
+    measure(
+        "readout",
+        "resonator",
+        None,
+        dual_demod.full("rotated_cos", "out1", "rotated_sin", "out2", I),
+        dual_demod.full("rotated_minus_sin", "out1", "rotated_cos", "out2", Q),
+    )
+    if threshold is not None:
+        assign(state, I > threshold)
+    return state, I, Q
+
+
 #############
 # VARIABLES #
 #############
-u = unit()
+
 qop_ip = "127.0.0.1"
 
 # Qubits
-qubit_IF = 50 * u.MHz
-qubit_LO = 7 * u.GHz
+qubit_IF = -95662718.5348127 - 1.3938737857566341e6
+qubit_ef_IF = -259.1453349274868e6
+# anaharmonicity 12-01 = -163.320497966974e6
+qubit_LO = 7e9
+qubit_ef_LO = 7e9
 mixer_qubit_g = 0.0
 mixer_qubit_phi = 0.0
 
-qubit_T1 = int(10 * u.us)
+qubit_T1 = int(20e3)
 
-saturation_len = 1000
-saturation_amp = 0.1
-const_len = 100
+saturation_len = 100000
+saturation_amp = 0.0005
+const_len = 1000
 const_amp = 0.1
 square_pi_len = 100
 square_pi_amp = 0.1
 
-drag_coef = 0
-anharmonicity = -200 * u.MHz
-AC_stark_detuning = 0 * u.MHz
+# drag_coef = -0.005
+# det = -53e6
+drag_coef = 0.11732848672767586
+det = 0
 
-gauss_len = 20
+gauss_len = 16
 gauss_sigma = gauss_len / 5
-gauss_amp = 0.35
-gauss_wf = gauss_amp * gaussian(gauss_len, gauss_sigma)
+gauss_amp = 0.05
+gauss_wf, gauss_der_wf = np.array(drag_cosine_pulse_waveforms(gauss_amp, gauss_len, alpha=0, delta=-0.163e9))
+# gauss_wf = gauss_amp * gaussian(gauss_len, gauss_sigma)
 
-displace_len = 40
-displace_sigma = displace_len / 5
-displace_amp = 0.35
-displace_wf = displace_amp * gaussian(displace_len, displace_sigma)
-
-x180_len = 40
+x180_len = 20
 x180_sigma = x180_len / 5
-x180_amp = 0.35
+x180_amp = 0.096  # *2 due to half time
+# x180_wf, x180_der_wf = np.array(drag_gaussian_pulse_waveforms(x180_amp, x180_len, x180_sigma, alpha=drag_coef, delta=-0.163e9, detuning=det))
 x180_wf, x180_der_wf = np.array(
-    drag_gaussian_pulse_waveforms(
-        x180_amp, x180_len, x180_sigma, alpha=drag_coef, anharmonicity=anharmonicity, detuning=AC_stark_detuning
-    )
+    drag_cosine_pulse_waveforms(x180_amp, x180_len, alpha=drag_coef, delta=(-2 * np.pi * 0.163e9), detuning=det)
 )
-x180_I_wf = x180_wf
-x180_Q_wf = x180_der_wf
 # No DRAG when alpha=0, it's just a gaussian.
 
 x90_len = x180_len
 x90_sigma = x90_len / 5
-x90_amp = x180_amp / 2
+x90_amp = 0.096 / 2
+# x90_wf, x90_der_wf = np.array(drag_gaussian_pulse_waveforms(x90_amp, x90_len, x90_sigma, alpha=drag_coef, delta=-0.163e9, detuning=det))
 x90_wf, x90_der_wf = np.array(
-    drag_gaussian_pulse_waveforms(
-        x90_amp, x90_len, x90_sigma, alpha=drag_coef, anharmonicity=anharmonicity, detuning=AC_stark_detuning
-    )
+    drag_cosine_pulse_waveforms(x90_amp, x90_len, alpha=drag_coef, delta=(-2 * np.pi * 0.163e9), detuning=det)
 )
-x90_I_wf = x90_wf
-x90_Q_wf = x90_der_wf
 # No DRAG when alpha=0, it's just a gaussian.
 
 minus_x90_len = x180_len
 minus_x90_sigma = minus_x90_len / 5
-minus_x90_amp = -x90_amp
+minus_x90_amp = -0.096 / 2
+# minus_x90_wf, minus_x90_der_wf = np.array(
+#     drag_gaussian_pulse_waveforms(minus_x90_amp, minus_x90_len, minus_x90_sigma, alpha=drag_coef, delta=-0.163e9, detuning=det)
+# )
 minus_x90_wf, minus_x90_der_wf = np.array(
-    drag_gaussian_pulse_waveforms(
-        minus_x90_amp,
-        minus_x90_len,
-        minus_x90_sigma,
-        alpha=drag_coef,
-        anharmonicity=anharmonicity,
-        detuning=AC_stark_detuning,
+    drag_cosine_pulse_waveforms(
+        minus_x90_amp, minus_x90_len, alpha=drag_coef, delta=(-2 * np.pi * 0.163e9), detuning=det
     )
 )
-minus_x90_I_wf = minus_x90_wf
-minus_x90_Q_wf = minus_x90_der_wf
 # No DRAG when alpha=0, it's just a gaussian.
 
 y180_len = x180_len
 y180_sigma = y180_len / 5
-y180_amp = x180_amp
+y180_amp = 0.096
+# y180_wf, y180_der_wf = np.array(drag_gaussian_pulse_waveforms(y180_amp, y180_len, y180_sigma, alpha=drag_coef, delta=-0.163e9, detuning=det))
 y180_wf, y180_der_wf = np.array(
-    drag_gaussian_pulse_waveforms(
-        y180_amp, y180_len, y180_sigma, alpha=drag_coef, anharmonicity=anharmonicity, detuning=AC_stark_detuning
-    )
+    drag_cosine_pulse_waveforms(y180_amp, y180_len, alpha=drag_coef, delta=(-2 * np.pi * 0.163e9), detuning=det)
 )
-y180_I_wf = (-1) * y180_der_wf
-y180_Q_wf = y180_wf
+y180_der_wf = (-1) * y180_der_wf  # for the correct sign in config
 # No DRAG when alpha=0, it's just a gaussian.
 
 y90_len = x180_len
 y90_sigma = y90_len / 5
-y90_amp = y180_amp / 2
+y90_amp = 0.096 / 2
+# y90_wf, y90_der_wf = np.array(drag_gaussian_pulse_waveforms(y90_amp, y90_len, y90_sigma, alpha=drag_coef, delta=-0.163e9, detuning=det))
 y90_wf, y90_der_wf = np.array(
-    drag_gaussian_pulse_waveforms(
-        y90_amp, y90_len, y90_sigma, alpha=drag_coef, anharmonicity=anharmonicity, detuning=AC_stark_detuning
-    )
+    drag_cosine_pulse_waveforms(y90_amp, y90_len, alpha=drag_coef, delta=(-2 * np.pi * 0.163e9), detuning=det)
 )
-y90_I_wf = (-1) * y90_der_wf
-y90_Q_wf = y90_wf
+y90_der_wf = (-1) * y90_der_wf
 # No DRAG when alpha=0, it's just a gaussian.
 
 minus_y90_len = y180_len
 minus_y90_sigma = minus_y90_len / 5
-minus_y90_amp = -y90_amp
+minus_y90_amp = -0.096 / 2
+# minus_y90_wf, minus_y90_der_wf = np.array(
+#     drag_gaussian_pulse_waveforms(minus_y90_amp, minus_y90_len, minus_y90_sigma, alpha=drag_coef, delta=-0.163e9, detuning=det)
+# )
 minus_y90_wf, minus_y90_der_wf = np.array(
-    drag_gaussian_pulse_waveforms(
-        minus_y90_amp,
-        minus_y90_len,
-        minus_y90_sigma,
-        alpha=drag_coef,
-        anharmonicity=anharmonicity,
-        detuning=AC_stark_detuning,
+    drag_cosine_pulse_waveforms(
+        minus_y90_amp, minus_y90_len, alpha=drag_coef, delta=(-2 * np.pi * 0.163e9), detuning=det
     )
 )
-minus_y90_I_wf = (-1) * minus_y90_der_wf
-minus_y90_Q_wf = minus_y90_wf
+minus_y90_der_wf = (-1) * minus_y90_der_wf
 # No DRAG when alpha=0, it's just a gaussian.
 
 # Resonator
-resonator_IF = 60 * u.MHz
-resonator_LO = 5.5 * u.GHz
+resonator_IF = -145e6
+resonator_LO = 5.5e9
 mixer_resonator_g = 0.0
 mixer_resonator_phi = 0.0
 
-time_of_flight = 180
+smearing = 0
+time_of_flight = 180 + 20 * 4
 
 short_readout_len = 500
 short_readout_amp = 0.4
-readout_len = 5000
-readout_amp = 0.2
+readout_len = 760
+readout_amp = 0.06 * 0.7
 long_readout_len = 50000
-long_readout_amp = 0.1
+long_readout_amp = 0.004
 
 # IQ Plane
-rotation_angle = (0.0 / 180) * np.pi
-ge_threshold = 0.0
+rotation_angle = ((-238 - 348.7) / 180) * np.pi
+ge_threshold = -8.864e-05
 
 
 config = {
@@ -167,10 +185,16 @@ config = {
     "controllers": {
         "con1": {
             "analog_outputs": {
-                1: {"offset": 0.0},  # I qubit
-                2: {"offset": 0.0},  # Q qubit
-                3: {"offset": 0.0},  # I resonator
-                4: {"offset": 0.0},  # Q resonator
+                1: {"offset": 0.0},  # q0 I
+                2: {"offset": 0.0},  # q0 Q
+                3: {"offset": 0.0},  #
+                4: {"offset": 0.0},  #
+                5: {"offset": 0.0},  # resonator
+                6: {"offset": 0.0},  # resonator
+                7: {"offset": -0.27524204128326885},  # qo flux
+                8: {"offset": 0.0},  #
+                9: {"offset": 0.0},  #
+                10: {"offset": 0.0},  #
             },
             "digital_outputs": {},
             "analog_inputs": {
@@ -202,17 +226,29 @@ config = {
                 "-y90": "-y90_pulse",
             },
         },
+        "qubit_ef": {
+            "mixInputs": {
+                "I": ("con1", 1),
+                "Q": ("con1", 2),
+                "lo_frequency": qubit_ef_LO,
+                "mixer": "mixer_qubit_ef",
+            },
+            "intermediate_frequency": qubit_ef_IF,
+            "operations": {
+                "cw": "const_pulse",
+                "saturation": "saturation_pulse",
+            },
+        },
         "resonator": {
             "mixInputs": {
-                "I": ("con1", 3),
-                "Q": ("con1", 4),
+                "I": ("con1", 5),
+                "Q": ("con1", 6),
                 "lo_frequency": resonator_LO,
                 "mixer": "mixer_resonator",
             },
             "intermediate_frequency": resonator_IF,
             "operations": {
                 "cw": "const_pulse",
-                "displace": "displace_pulse",
                 "short_readout": "short_readout_pulse",
                 "readout": "readout_pulse",
                 "long_readout": "long_readout_pulse",
@@ -222,7 +258,7 @@ config = {
                 "out2": ("con1", 2),
             },
             "time_of_flight": time_of_flight,
-            "smearing": 0,
+            "smearing": smearing,
         },
     },
     "pulses": {
@@ -255,60 +291,52 @@ config = {
                 "Q": "zero_wf",
             },
         },
-        "displace_pulse": {
-            "operation": "control",
-            "length": displace_len,
-            "waveforms": {
-                "I": "displace_wf",
-                "Q": "displace_wf",
-            },
-        },
         "x90_pulse": {
             "operation": "control",
             "length": x90_len,
             "waveforms": {
-                "I": "x90_I_wf",
-                "Q": "x90_Q_wf",
+                "I": "x90_wf",
+                "Q": "x90_der_wf",
             },
         },
         "x180_pulse": {
             "operation": "control",
             "length": x180_len,
             "waveforms": {
-                "I": "x180_I_wf",
-                "Q": "x180_Q_wf",
+                "I": "x180_wf",
+                "Q": "x180_der_wf",
             },
         },
         "-x90_pulse": {
             "operation": "control",
             "length": minus_x90_len,
             "waveforms": {
-                "I": "minus_x90_I_wf",
-                "Q": "minus_x90_Q_wf",
+                "I": "minus_x90_wf",
+                "Q": "minus_x90_der_wf",
             },
         },
         "y90_pulse": {
             "operation": "control",
             "length": y90_len,
             "waveforms": {
-                "I": "y90_I_wf",
-                "Q": "y90_Q_wf",
+                "I": "y90_der_wf",
+                "Q": "y90_wf",
             },
         },
         "y180_pulse": {
             "operation": "control",
             "length": y180_len,
             "waveforms": {
-                "I": "y180_I_wf",
-                "Q": "y180_Q_wf",
+                "I": "y180_der_wf",
+                "Q": "y180_wf",
             },
         },
         "-y90_pulse": {
             "operation": "control",
             "length": minus_y90_len,
             "waveforms": {
-                "I": "minus_y90_I_wf",
-                "Q": "minus_y90_Q_wf",
+                "I": "minus_y90_der_wf",
+                "Q": "minus_y90_wf",
             },
         },
         "short_readout_pulse": {
@@ -367,21 +395,20 @@ config = {
         "const_wf": {"type": "constant", "sample": const_amp},
         "saturation_drive_wf": {"type": "constant", "sample": saturation_amp},
         "square_pi_wf": {"type": "constant", "sample": square_pi_amp},
-        "displace_wf": {"type": "arbitrary", "samples": displace_wf.tolist()},
         "zero_wf": {"type": "constant", "sample": 0.0},
         "gauss_wf": {"type": "arbitrary", "samples": gauss_wf.tolist()},
-        "x90_I_wf": {"type": "arbitrary", "samples": x90_I_wf.tolist()},
-        "x90_Q_wf": {"type": "arbitrary", "samples": x90_Q_wf.tolist()},
-        "x180_I_wf": {"type": "arbitrary", "samples": x180_I_wf.tolist()},
-        "x180_Q_wf": {"type": "arbitrary", "samples": x180_Q_wf.tolist()},
-        "minus_x90_I_wf": {"type": "arbitrary", "samples": minus_x90_I_wf.tolist()},
-        "minus_x90_Q_wf": {"type": "arbitrary", "samples": minus_x90_Q_wf.tolist()},
-        "y90_Q_wf": {"type": "arbitrary", "samples": y90_Q_wf.tolist()},
-        "y90_I_wf": {"type": "arbitrary", "samples": y90_I_wf.tolist()},
-        "y180_Q_wf": {"type": "arbitrary", "samples": y180_Q_wf.tolist()},
-        "y180_I_wf": {"type": "arbitrary", "samples": y180_I_wf.tolist()},
-        "minus_y90_Q_wf": {"type": "arbitrary", "samples": minus_y90_Q_wf.tolist()},
-        "minus_y90_I_wf": {"type": "arbitrary", "samples": minus_y90_I_wf.tolist()},
+        "x90_wf": {"type": "arbitrary", "samples": x90_wf.tolist()},
+        "x90_der_wf": {"type": "arbitrary", "samples": x90_der_wf.tolist()},
+        "x180_wf": {"type": "arbitrary", "samples": x180_wf.tolist()},
+        "x180_der_wf": {"type": "arbitrary", "samples": x180_der_wf.tolist()},
+        "minus_x90_wf": {"type": "arbitrary", "samples": minus_x90_wf.tolist()},
+        "minus_x90_der_wf": {"type": "arbitrary", "samples": minus_x90_der_wf.tolist()},
+        "y90_wf": {"type": "arbitrary", "samples": y90_wf.tolist()},
+        "y90_der_wf": {"type": "arbitrary", "samples": y90_der_wf.tolist()},
+        "y180_wf": {"type": "arbitrary", "samples": y180_wf.tolist()},
+        "y180_der_wf": {"type": "arbitrary", "samples": y180_der_wf.tolist()},
+        "minus_y90_wf": {"type": "arbitrary", "samples": minus_y90_wf.tolist()},
+        "minus_y90_der_wf": {"type": "arbitrary", "samples": minus_y90_der_wf.tolist()},
         "short_readout_wf": {"type": "constant", "sample": short_readout_amp},
         "readout_wf": {"type": "constant", "sample": readout_amp},
         "long_readout_wf": {"type": "constant", "sample": long_readout_amp},
@@ -467,6 +494,13 @@ config = {
         "mixer_qubit": [
             {
                 "intermediate_frequency": qubit_IF,
+                "lo_frequency": qubit_LO,
+                "correction": IQ_imbalance(mixer_qubit_g, mixer_qubit_phi),
+            }
+        ],
+        "mixer_qubit_ef": [
+            {
+                "intermediate_frequency": qubit_ef_IF,
                 "lo_frequency": qubit_LO,
                 "correction": IQ_imbalance(mixer_qubit_g, mixer_qubit_phi),
             }

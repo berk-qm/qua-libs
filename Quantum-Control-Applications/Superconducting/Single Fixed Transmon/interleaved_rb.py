@@ -1,26 +1,35 @@
 """
-Performs a 1 qubit randomized benchmarking to measure the 1 qubit gate fidelity. This version is using directly the I
-& Q data and should be used when there is no single-shot readout
+Performs a single qubit interleaved randomized benchmarking to measure a specific single qubit gate fidelity
 """
 from qm.qua import *
 from qm.QuantumMachinesManager import QuantumMachinesManager
+from qm import SimulationConfig
 from scipy.optimize import curve_fit
 from configuration import *
 import matplotlib.pyplot as plt
 import numpy as np
 from qualang_tools.bakery.randomized_benchmark_c1 import c1_table
+from macros import readout_macro
+
+
+#############################################
+# Program dependent variables and functions #
+#############################################
 
 inv_gates = [int(np.where(c1_table[i, :] == 0)[0][0]) for i in range(24)]
+# index from play_sequence() function defined below of the gate under study
+# Correspondence table:
+#  0: identity |  1: x180 |  2: y180
+# 12: x90      | 13: -x90 | 14: y90 | 15: -y90 |
+interleaved_gate_index = 2
 max_circuit_depth = int(3 * qubit_T1 / x180_len)
-num_of_sequences = 50
-n_avg = 20000
+num_of_sequences = 5
+n_avg = 10
 seed = 345324
 cooldown_time = 5 * qubit_T1 // 4
 
-qmm = QuantumMachinesManager(qop_ip)
 
-
-def generate_sequence():
+def generate_sequence(interleaved_gate_index):
     cayley = declare(int, value=c1_table.flatten().tolist())
     inv_list = declare(int, value=inv_gates)
     current_state = declare(int)
@@ -31,11 +40,16 @@ def generate_sequence():
     rand = Random(seed=seed)
 
     assign(current_state, 0)
-    with for_(i, 0, i < max_circuit_depth, i + 1):
+    with for_(i, 0, i < 2 * max_circuit_depth, i + 2):
         assign(step, rand.rand_int(24))
         assign(current_state, cayley[current_state * 24 + step])
         assign(sequence[i], step)
         assign(inv_gate[i], inv_list[current_state])
+        # interleaved gate
+        assign(step, interleaved_gate_index)
+        assign(current_state, cayley[current_state * 24 + step])
+        assign(sequence[i + 1], step)
+        assign(inv_gate[i + 1], inv_list[current_state])
 
     return sequence, inv_gate
 
@@ -115,84 +129,88 @@ def play_sequence(sequence_list, depth):
                 play("-x90", "qubit")
 
 
+###################
+# The QUA program #
+###################
 with program() as rb:
     depth = declare(int)
     saved_gate = declare(int)
     m = declare(int)
     n = declare(int)
-    n_st = declare_stream()
     I = declare(fixed)
     Q = declare(fixed)
-    I_st = declare_stream()
-    Q_st = declare_stream()
+    state = declare(bool)
+    state_st = declare_stream()
+    depth_target = declare(int)
 
-    with for_(n, 0, n < n_avg, n + 1):
-        with for_(m, 0, m < num_of_sequences, m + 1):
-            sequence_list, inv_gate_list = generate_sequence()
+    with for_(m, 0, m < num_of_sequences, m + 1):
+        # Generates the RB sequence with a gate interleaved after each Clifford
+        sequence_list, inv_gate_list = generate_sequence(interleaved_gate_index=interleaved_gate_index)
+        # Depth_target is used to always play the gates by pairs [(random_gate-interleaved_gate)^depth/2-inv_gate]
+        assign(depth_target, 2)
+        with for_(depth, 1, depth <= 2 * max_circuit_depth, depth + 1):
+            # Replacing the last gate in the sequence with the sequence's inverse gate
+            # The original gate is saved in 'saved_gate' and is being restored at the end
+            assign(saved_gate, sequence_list[depth])
+            assign(sequence_list[depth], inv_gate_list[depth - 1])
 
-            with for_(depth, 1, depth <= max_circuit_depth, depth + 1):
-                # Replacing the last gate in the sequence with the sequence's inverse gate
-                # The original gate is saved in 'saved_gate' and is being restored at the end
-                assign(saved_gate, sequence_list[depth])
-                assign(sequence_list[depth], inv_gate_list[depth - 1])
+            with if_(depth == depth_target):
+                with for_(n, 0, n < n_avg, n + 1):
+                    # Can replace by active reset
+                    wait(cooldown_time, "resonator")
 
-                wait(cooldown_time, "resonator")
+                    align("resonator", "qubit")
 
-                align("resonator", "qubit")
+                    play_sequence(sequence_list, depth)
+                    align("qubit", "resonator")
+                    # Make sure you updated the ge_threshold
+                    state, I, Q = readout_macro(threshold=ge_threshold, state=state, I=I, Q=Q)
 
-                play_sequence(sequence_list, depth)
-                align("qubit", "resonator")
-                measure(
-                    "readout",
-                    "resonator",
-                    None,
-                    dual_demod.full("cos", "out1", "sin", "out2", I),
-                    dual_demod.full("minus_sin", "out1", "cos", "out2", Q),
-                )
-
-                save(I, I_st)
-                save(Q, Q_st)
-
-                assign(sequence_list[depth], saved_gate)
-        save(n, n_st)
+                    save(state, state_st)
+                # always play the random gate followed by the interleaved gate
+                assign(depth_target, depth_target + 2)
+            assign(sequence_list[depth], saved_gate)
 
     with stream_processing():
-        I_st.buffer(max_circuit_depth).buffer(num_of_sequences).average().save("I")
-        Q_st.buffer(max_circuit_depth).buffer(num_of_sequences).average().save("Q")
-        n_st.save("iteration")
+        state_st.boolean_to_int().buffer(n_avg).map(FUNCTIONS.average()).buffer(max_circuit_depth).buffer(
+            num_of_sequences
+        ).save("res")
 
-qm = qmm.open_qm(config)
 
-job = qm.execute(rb)
+#####################################
+#  Open Communication with the QOP  #
+#####################################
 
-# Get results from QUA program
-results = fetching_tool(job, data_list=["I", "Q", "iteration"], mode="live")
-# Live plotting
-fig = plt.figure()
-interrupt_on_close(fig, job)  # Interrupts the job when closing the figure
+qmm = QuantumMachinesManager(qop_ip)
 
-x = np.linspace(1, max_circuit_depth, max_circuit_depth)
-while results.is_processing():
-    # Fetch results
-    I, Q, iteration = results.fetch_all()
-    # Progress bar
-    progress_counter(iteration, n_avg, start_time=results.get_start_time())
-    # Plot results
-    plt.cla()
-    plt.plot(x, np.average(I, axis=0), ".", label="I")
-    plt.plot(x, np.average(Q, axis=0), ".", label="Q")
+#######################
+# Simulate or execute #
+#######################
+simulate = False
+
+if simulate:
+    simulation_config = SimulationConfig(duration=50000)  # in clock cycles
+    job = qmm.simulate(config, rb, simulation_config)
+    job.get_simulated_samples().con1.plot()
+else:
+    qm = qmm.open_qm(config)
+
+    job = qm.execute(rb)
+    res_handles = job.result_handles
+    res_handles.wait_for_all_values()
+    state = res_handles.res.fetch_all()
+
+    value = 1 - np.average(state, axis=0)
+    error = np.std(state, axis=0)
+
+    def power_law(m, a, b, p):
+        return a * (p**m) + b
+
+    plt.figure()
+    x = np.linspace(1, max_circuit_depth, max_circuit_depth)
     plt.xlabel("Number of cliffords")
-    plt.legend()
-    plt.pause(0.1)
+    plt.ylabel("Sequence Fidelity")
 
-
-def power_law(m, a, b, p):
-    return a * (p**m) + b
-
-
-for data in [I, Q]:
-    value = np.average(data, axis=0)  # Can change to Q
-    error = np.std(data, axis=0)
     pars, cov = curve_fit(
         f=power_law,
         xdata=x,
@@ -201,7 +219,7 @@ for data in [I, Q]:
         bounds=(-np.inf, np.inf),
         maxfev=2000,
     )
-    plt.figure()
+
     plt.errorbar(x, value, yerr=error, marker=".")
     plt.plot(x, power_law(x, *pars), linestyle="--", linewidth=2)
 
