@@ -284,7 +284,7 @@ class qubit_frequency_tracking:
         self.tau_vec = tau_vec
 
         if correct:
-            update_frequency(self.qubit, self.f_res + self.f_det - self.corr)
+            update_frequency(self.qubit, self.f_res_corr + self.f_det)
         else:
             update_frequency(self.qubit, self.f_res + self.f_det)
 
@@ -367,12 +367,8 @@ class qubit_frequency_tracking:
                 # Qubit initialization
                 # Note: if you are using active reset, you might want to do it with the new corrected frequency
                 reset_qubit("cooldown", cooldown_time=1000)
-                ####################################################################################################
                 # Update the frequency
-                if correct:
-                    update_frequency(self.qubit, self.f + self.corr)
-                else:
-                    update_frequency(self.qubit, self.f)
+                update_frequency(self.qubit, self.f)
                 # Ramsey sequence
                 play("x90", self.qubit)
                 wait(self.dephasing_time, self.qubit)
@@ -436,7 +432,7 @@ class qubit_frequency_tracking:
         power_of_2 = 15
         with for_(self.n, 0, self.n < 2**power_of_2, self.n + 1):
             # Go to the left side of the central fringe
-            assign(self.f, self.f_res - self.delta)
+            assign(self.f, self.f_res_corr - self.delta)
             # Alternate between left and right sides
             with for_(self.idx, 0, self.idx < 2, self.idx + 1):
                 # Qubit initialization
