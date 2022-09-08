@@ -151,10 +151,11 @@ class qubit_frequency_tracking:
         self.delta = None
         self.frequency_sweep_amp = None
 
+    def qua_declaration(self):
         self.I = declare(fixed)
         self.Q = declare(fixed)
         self.state_estimation = declare(fixed)
-        self.state_estimation_st = [declare_stream() for i in range(10)]  # TODO Why 10 and not 2?
+        self.state_estimation_st = [declare_stream() for i in range(10)]
         self.state_estimation_st_idx = 0
 
         self.res = declare(bool)
@@ -169,7 +170,7 @@ class qubit_frequency_tracking:
         self.if_total = declare(int, value=0)
         self.se_vec = declare(fixed, size=3)
         self.idx = declare(int)
-        self.fres_corr = declare(int, value=int(self.f_res + 0.5)) # TODO why +0.5?
+        self.fres_corr = declare(int, value=round(self.f_res))
         self.fres_corr_st = declare_stream()
         self.corr = declare(int, value=0)
         self.corr_st = declare_stream()
@@ -254,6 +255,7 @@ class qubit_frequency_tracking:
         :param bool correct: boolean for
         :return: None
         """
+
         self.f_det = f_det
         self.tau_vec = tau_vec
 
@@ -288,8 +290,8 @@ class qubit_frequency_tracking:
                     self.state_estimation,
                     self.state_estimation_st[self.state_estimation_st_idx],
                 )
-        # TODO this is inconsistent with the main program no?
-        self.state_estimation_st_idx = self.state_estimation_st_idx + 1
+
+        self.state_estimation_st_idx += 1
 
     def time_domain_ramsey_full_sweep_analysis(self, result_handles, stream_name):
         # Get the average excited population
