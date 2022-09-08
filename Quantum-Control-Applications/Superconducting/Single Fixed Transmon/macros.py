@@ -402,7 +402,7 @@ class qubit_frequency_tracking:
         self.frequency_sweep_amp = out["amp"]
         # HWHM of the frequency domain Ramsey central fringe around the qubit resonance
         # i.e. detuning to go from resonance to  half fringe
-        self.delta = 1 / (self.dephasing_time * 4e-9) / 4  # the last 4 is for 1/4 of a cycle (dephasing of pi/2)
+        self.delta = int(1 / (self.dephasing_time * 4e-9) / 4)  # the last 4 is for 1/4 of a cycle (dephasing of pi/2)
         # Plot fit
         plt.plot(self.f_vec - self.f_res, out["fit_func"](self.f_vec - self.f_res), "m", label='fit')
         # Plot specific points at half the central fringe

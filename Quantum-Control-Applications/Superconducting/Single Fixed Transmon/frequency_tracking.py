@@ -92,11 +92,13 @@ with program() as prog:
         freq_track_obj.state_estimation_st[0].buffer(len(tau_vec)).average().save("Pe_td_ref" )
         freq_track_obj.state_estimation_st[1].buffer(len(tau_vec)).average().save("Pe_td_corr")
         i_st.save("iteration")
+        freq_track_obj.f_res_corr_st.save_all("f_res_corr")
+        freq_track_obj.corr_st.save_all("corr")
 
 # Execute the program
 job = qm.execute(prog)
 # Handle results
-results = fetching_tool(job, ["Pe_td_ref", "Pe_td_corr", "iteration"], mode="live")
+results = fetching_tool(job, ["Pe_td_ref", "Pe_td_corr", "iteration", "f_res_corr", "corr"], mode="live")
 
 # Starting time
 t0 = time.time()
@@ -114,7 +116,7 @@ fig = plt.figure()
 interrupt_on_close(fig, job)
 while results.is_processing():
     # Fetch results
-    Pe_td_ref_, Pe_td_corr_, iteration = results.fetch_all()
+    Pe_td_ref_, Pe_td_corr_, iteration, f_res_corr, corr = results.fetch_all()
     # Progress bar
     progress_counter(iteration, n_repetitions, start_time=t0)
     # Get current time
