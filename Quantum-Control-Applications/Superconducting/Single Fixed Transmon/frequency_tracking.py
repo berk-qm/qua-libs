@@ -55,7 +55,8 @@ for arg in ["Pe_initial", "Pe_corrected"]:
 n_avg = 20
 f_min = freq_track_obj.f_res - 2 * freq_track_obj.f_det
 f_max = freq_track_obj.f_res + 2 * freq_track_obj.f_det
-f_vec = np.arange(4, 50_000, 2000)
+d_f = 2 * u.kHz
+f_vec = np.arange(f_min, f_max, d_f)
 oscillation = 1
 
 # The QUA program
@@ -77,62 +78,62 @@ freq_track_obj.freq_domain_ramsey_full_sweep_analysis(job.result_handles, "Pe_fd
 #########################
 #  Real-time correction #
 #########################
-# n_repetitions = 10000
-# tau_vec = np.arange(4, 50_000, 200)
-# with program() as prog:
-#
-#     i = declare(int)
-#     i_st = declare_stream()
-#     with for_(i, 0, i < n_repetitions, i + 1):
-#
-#         freq_track_obj.time_domain_ramsey_full_sweep(n_avg, freq_track_obj.f_det, tau_vec, False)
-#         freq_track_obj.two_points_ramsey()
-#         freq_track_obj.time_domain_ramsey_full_sweep(n_avg, freq_track_obj.f_det, tau_vec, True)
-#         save(i, i_st)
-#     with stream_processing():
-#         freq_track_obj.state_estimation_st[0].buffer(n_avg, len(tau_vec)).average().save("Pe_td_ref" )
-#         freq_track_obj.state_estimation_st[1].buffer(n_avg, len(tau_vec)).average().save("Pe_td_corr")
-#         i_st.save("iteration")
-#
-# # Execute the program
-# job = qm.execute(prog)
-# # Handle results
-# results = fetching_tool(job, ["Pe_td_ref", "Pe_td_corr", "iteration"], mode="live")
-#
-# # Starting time
-# t0 = time.time()
-#
-# hours = 2
-# t_ = t0
-# cond = (t_ - t0) / 3600 < hours
-# fig, (ax1, ax2) = plt.subplots(1, 2)
-# Pe_td_ref = []
-# Pe_td_corr = []
-# t = []
-#
-# while cond:
-#     # Fetch results
-#     Pe_td_ref_, Pe_td_corr_, iteration = results.fetch_all()
-#     # Progress bar
-#     progress_counter(iteration, n_repetitions, start_time=t0)
-#     # Get current time
-#     t_ = time.time()
-#     # Update while loop condition
-#     cond = (t_ - t0) / 3600 < hours
-#     # Update time vector and results
-#     t.append((t_ - t0) / 3600)
-#     Pe_td_ref.append(Pe_td_ref_)
-#     Pe_td_corr.append(Pe_td_corr_)
-#     # Plot results
-#     ax1.pcolormesh(freq_track_obj.tau_vec, t, Pe_td_ref)
-#     ax1.title.set_text("TD Ramsey feedback off")
-#     ax1.set_xlabel("tau [ns]")
-#     ax1.set_ylabel("time [hours]")
-#     ax2.pcolormesh(freq_track_obj.tau_vec, t, Pe_td_corr)
-#     ax2.title.set_text("TD Ramsey feedback on")
-#     ax2.set_xlabel("tau [ns]")
-#     ax2.set_ylabel("time [hours]")
-#     plt.pause(10)
+n_repetitions = 10000
+tau_vec = np.arange(4, 50_000, 200)
+with program() as prog:
+
+    i = declare(int)
+    i_st = declare_stream()
+    with for_(i, 0, i < n_repetitions, i + 1):
+
+        freq_track_obj.time_domain_ramsey_full_sweep(n_avg, freq_track_obj.f_det, tau_vec, False)
+        freq_track_obj.two_points_ramsey()
+        freq_track_obj.time_domain_ramsey_full_sweep(n_avg, freq_track_obj.f_det, tau_vec, True)
+        save(i, i_st)
+    with stream_processing():
+        freq_track_obj.state_estimation_st[0].buffer(n_avg, len(tau_vec)).average().save("Pe_td_ref" )
+        freq_track_obj.state_estimation_st[1].buffer(n_avg, len(tau_vec)).average().save("Pe_td_corr")
+        i_st.save("iteration")
+
+# Execute the program
+job = qm.execute(prog)
+# Handle results
+results = fetching_tool(job, ["Pe_td_ref", "Pe_td_corr", "iteration"], mode="live")
+
+# Starting time
+t0 = time.time()
+
+hours = 2
+t_ = t0
+cond = (t_ - t0) / 3600 < hours
+fig, (ax1, ax2) = plt.subplots(1, 2)
+Pe_td_ref = []
+Pe_td_corr = []
+t = []
+
+while cond:
+    # Fetch results
+    Pe_td_ref_, Pe_td_corr_, iteration = results.fetch_all()
+    # Progress bar
+    progress_counter(iteration, n_repetitions, start_time=t0)
+    # Get current time
+    t_ = time.time()
+    # Update while loop condition
+    cond = (t_ - t0) / 3600 < hours
+    # Update time vector and results
+    t.append((t_ - t0) / 3600)
+    Pe_td_ref.append(Pe_td_ref_)
+    Pe_td_corr.append(Pe_td_corr_)
+    # Plot results
+    ax1.pcolormesh(freq_track_obj.tau_vec, t, Pe_td_ref)
+    ax1.title.set_text("TD Ramsey feedback off")
+    ax1.set_xlabel("tau [ns]")
+    ax1.set_ylabel("time [hours]")
+    ax2.pcolormesh(freq_track_obj.tau_vec, t, Pe_td_corr)
+    ax2.title.set_text("TD Ramsey feedback on")
+    ax2.set_xlabel("tau [ns]")
+    ax2.set_ylabel("time [hours]")
+    plt.pause(10)
 
 
 ##################################################
