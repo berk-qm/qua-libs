@@ -191,6 +191,9 @@ class qubit_frequency_tracking:
         # Stream for f_res_corr
         self.f_res_corr_st = declare_stream()
 
+    def initialization(self):
+        self._qua_declaration()
+
     @staticmethod
     def _fit_ramsey(x, y):
 
@@ -328,7 +331,7 @@ class qubit_frequency_tracking:
         plt.xlabel("time[ns]")
         plt.ylabel("P(|e>)")
         # New intermediate frequency: f_res - (fitted_detuning - f_det)
-        self.f_res = self.f_res - (out["f"] * 1e9 - self.f_det)
+        self.f_res = self.f_res - int(out["f"] * 1e9 - self.f_det)
         print(f"shifting by {out['f'] * 1e9 - self.f_det:.0f} Hz, and now f_res = {self.f_res} Hz")
 
         # Dephasing time leading to a phase-shift of 2*pi for a frequency detuning f_det
@@ -357,7 +360,7 @@ class qubit_frequency_tracking:
             self.init = False
         self.f_vec = f_vec
         # Dephasing time to get a given number of oscillations in the frequency range given by f_vec
-        self.dephasing_time = oscillation_number * int(1 / (2 * max(f_vec)) / 4e-9)
+        self.dephasing_time = max(oscillation_number * int(1 / (2 * (max(f_vec)-self.f_res)) / 4e-9), 4)
 
         with for_(self.n, 0, self.n < n_avg, self.n + 1):
             with for_(*from_array(self.f, f_vec)):
@@ -443,9 +446,9 @@ class qubit_frequency_tracking:
                 # Set qubit frequency
                 update_frequency(self.qubit, self.f)
                 # Ramsey sequence
-                play("pi2", self.qubit)
+                play("x90", self.qubit)
                 wait(self.dephasing_time, self.qubit)
-                play("pi2", self.qubit)
+                play("x90", self.qubit)
 
                 align(self.qubit, self.rr)
                 # should be replaced by the readout procedure of the qubit. A boolean value should be assigned into
