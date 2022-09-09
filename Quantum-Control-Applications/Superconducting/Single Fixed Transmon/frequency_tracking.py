@@ -18,11 +18,9 @@ qm = qmm.open_qm(config)
 # Initialize object
 freq_track_obj = qubit_frequency_tracking("qubit", "resonator", qubit_IF, ge_threshold, True)
 
-
 ########################
 #  Time domain Ramsey  #
 ########################
-
 n_avg = 20
 tau_vec = np.arange(4, 50_000, 50)
 print(f"Initial frequency: {freq_track_obj.f_res:.0f} Hz")
@@ -85,7 +83,7 @@ with program() as prog:
     with for_(i, 0, i < n_repetitions, i + 1):
         freq_track_obj.initialization()
         freq_track_obj.time_domain_ramsey_full_sweep(n_avg, freq_track_obj.f_det, tau_vec, False)
-        freq_track_obj.two_points_ramsey()
+        freq_track_obj.two_points_ramsey(n_avg_power_of_2=15)
         freq_track_obj.time_domain_ramsey_full_sweep(n_avg, freq_track_obj.f_det, tau_vec, True)
         save(i, i_st)
     with stream_processing():

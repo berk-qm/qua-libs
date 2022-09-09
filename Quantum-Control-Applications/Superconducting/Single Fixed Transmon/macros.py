@@ -322,7 +322,7 @@ class qubit_frequency_tracking:
 
                 align(self.qubit, self.rr)
                 # should be replaced by the readout procedure of the qubit. A boolean value should be assigned into
-                # the QUA variable "self.res". True for the qubit in the excited. ##################################
+                # the QUA variable "self.res". True for the qubit in the excited.
                 measure(
                     "readout",
                     "resonator",
@@ -448,7 +448,16 @@ class qubit_frequency_tracking:
         plt.ylabel("P(|e>)")
         plt.legend()
 
-    def two_points_ramsey(self):
+    def two_points_ramsey(self, n_avg_power_of_2):
+        """
+        Sequence consisting of measuring successively the left and right sides of the Ramsey central fringe around
+        resonance to track the qubit frequency drifts.
+
+        :param int n_avg_power_of_2: power of two defining the number of averages as n_avg=2**n_avg_power_of_2
+        :return:
+        """
+        if (not np.log2(2**n_avg_power_of_2).is_integer()) or (n_avg_power_of_2 > 20):
+            raise ValueError("'n_avg_power_of_2' must be defined as the power of two defining the number of averages (n_avg=2**n_avg_power_of_2)")
         # Declare the QUA variables once
         if self.init:
             self._qua_declaration()
@@ -456,7 +465,6 @@ class qubit_frequency_tracking:
 
         # Scale factor to convert amplitude to frequency change: frequency_sweep_amp is the amplitude of the frequency
         # domain oscillation. The factor 4e-9 is to convert tau from clock cycles to sec.
-        # TODO: why no exp(-tau/T2)?
         scale_factor = int(
             1 / (2 * np.pi * self.dephasing_time * 4e-9 * self.frequency_sweep_amp)
         )  # in Hz per unit of I, Q or state
@@ -464,8 +472,7 @@ class qubit_frequency_tracking:
         assign(self.two_point_vec[0], 0)  # Left side
         assign(self.two_point_vec[1], 0)  # Right side
         # Number of averages defined as a power of 2 to perform the average on the FPGA using bit-shifts.
-        power_of_2 = 15
-        with for_(self.n, 0, self.n < 2**power_of_2, self.n + 1):
+        with for_(self.n, 0, self.n < 2**n_avg_power_of_2, self.n + 1):
             # Go to the left side of the central fringe
             assign(self.f, self.f_res_corr - self.delta)
             # Alternate between left and right sides
@@ -509,7 +516,7 @@ class qubit_frequency_tracking:
                 ####################################################################################################
                 # Sum the results and divide by the number of iterations to get the average on the fly
                 assign(
-                    self.two_point_vec[self.idx], self.two_point_vec[self.idx] + (Cast.to_fixed(self.res) >> power_of_2)
+                    self.two_point_vec[self.idx], self.two_point_vec[self.idx] + (Cast.to_fixed(self.res) >> n_avg_power_of_2)
                 )
                 # Go to the right side of the central fringe
                 assign(self.f, self.f + 2 * self.delta)
