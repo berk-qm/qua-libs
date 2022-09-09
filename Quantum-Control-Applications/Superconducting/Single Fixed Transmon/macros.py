@@ -136,7 +136,7 @@ def active_reset(threshold, max_tries=1, Ig=None):
 
 # Frequency tracking class
 class qubit_frequency_tracking:
-    def __init__(self, qubit, rr, f_res, ge_threshold):
+    def __init__(self, qubit, rr, f_res, ge_threshold, frame_rotation_flag=False):
         # The qubit element
         self.qubit = qubit
         # The readout resonator element
@@ -157,6 +157,8 @@ class qubit_frequency_tracking:
         self.delta = None
         # Fitted amplitude of the frequency domain oscillations used to derive the scale factor in two_point_ramsey
         self.frequency_sweep_amp = None
+        # Flag to perform the Ramsey scans by dephasing the second pi/2 pulse instead of applying a detuning
+        self.frame_rotation = frame_rotation_flag
         # Flag to declare the QUA variable and initialize state_estimation_st_idx during the first run
         self.init = True
 
@@ -190,6 +192,10 @@ class qubit_frequency_tracking:
         self.f_res_corr = declare(int, value=round(self.f_res))
         # Stream for f_res_corr
         self.f_res_corr_st = declare_stream()
+        # Detuning used to derive the phase of the second pi/2 pulse when using frame rotation
+        self.frame_rotation_detuning = declare(fixed)
+        # Conversion factor from GHz to Hz
+        self.Hz_to_GHz = declare(fixed, value=1e-9)
 
     def initialization(self):
         self._qua_declaration()
@@ -263,7 +269,7 @@ class qubit_frequency_tracking:
             "initial_offset": popt[5] * initial_offset,
         }
 
-        plt.plot(x, fit_type(x, [1, 1, 1, angle0, 1, 1, 1]), "--r", linewidth=1)
+        plt.plot(x, fit_type(x, [1, 1, 1, angle0, 1, 1, 1]), "--r", linewidth=1, label="Fit initial guess")
         return out
 
     def time_domain_ramsey_full_sweep(self, n_avg, f_det, tau_vec, correct=False):
@@ -282,11 +288,16 @@ class qubit_frequency_tracking:
 
         self.f_det = f_det
         self.tau_vec = tau_vec
-
-        if correct:
-            update_frequency(self.qubit, self.f_res_corr + self.f_det)
+        if self.frame_rotation:
+            if correct:
+                update_frequency(self.qubit, self.f_res_corr)
+            else:
+                update_frequency(self.qubit, self.f_res)
         else:
-            update_frequency(self.qubit, self.f_res + self.f_det)
+            if correct:
+                update_frequency(self.qubit, self.f_res_corr + self.f_det)
+            else:
+                update_frequency(self.qubit, self.f_res + self.f_det)
 
         with for_(self.n, 0, self.n < n_avg, self.n + 1):
             with for_(*from_array(self.tau, tau_vec)):
@@ -295,6 +306,10 @@ class qubit_frequency_tracking:
                 # Ramsey sequence (time-domain)
                 play("x90", self.qubit)
                 wait(self.tau, self.qubit)
+                # Perform Time domain Ramsey with a frame rotation instead of detuning
+                # 4*tau because tau was in clock cycles and 1e-9 because tau is ns
+                if self.frame_rotation:
+                    frame_rotation_2pi(Cast.mul_fixed_by_int(self.f_det * 1e-9, 4 * self.tau), self.qubit)
                 play("x90", self.qubit)
 
                 align(self.qubit, self.rr)
@@ -360,7 +375,7 @@ class qubit_frequency_tracking:
             self.init = False
         self.f_vec = f_vec
         # Dephasing time to get a given number of oscillations in the frequency range given by f_vec
-        self.dephasing_time = max(oscillation_number * int(1 / (2 * (max(f_vec)-self.f_res)) / 4e-9), 4)
+        self.dephasing_time = max(oscillation_number * int(1 / (2 * (max(f_vec) - self.f_res)) / 4e-9), 4)
 
         with for_(self.n, 0, self.n < n_avg, self.n + 1):
             with for_(*from_array(self.f, f_vec)):
@@ -368,9 +383,18 @@ class qubit_frequency_tracking:
                 # Note: if you are using active reset, you might want to do it with the new corrected frequency
                 reset_qubit("cooldown", cooldown_time=1000)
                 # Update the frequency
-                update_frequency(self.qubit, self.f)
+                if self.frame_rotation:
+                    update_frequency(self.qubit, self.f_res)
+                else:
+                    update_frequency(self.qubit, self.f)
                 # Ramsey sequence
                 play("x90", self.qubit)
+
+                if self.frame_rotation:
+                    assign(self.frame_rotation_detuning, Cast.mul_fixed_by_int(self.Hz_to_GHz, self.f - self.f_res))
+                    frame_rotation_2pi(
+                        Cast.mul_fixed_by_int(self.frame_rotation_detuning, 4 * self.dephasing_time), self.qubit
+                    )
                 wait(self.dephasing_time, self.qubit)
                 play("x90", self.qubit)
 
@@ -383,6 +407,8 @@ class qubit_frequency_tracking:
                     None,
                     dual_demod.full("cos", "out1", "sin", "out2", self.I),
                 )
+                if self.frame_rotation:
+                    reset_frame(self.qubit)
                 assign(self.res, self.I > self.ge_threshold)
                 ####################################################################################################
                 # Convert bool to fixed to perform the average
@@ -395,7 +421,7 @@ class qubit_frequency_tracking:
         # Get the average excited population
         Pe = result_handles.get(stream_name).fetch_all()
         # Plot raw data
-        plt.plot(self.f_vec - self.f_res, Pe, '.', label='Experimental data')
+        plt.plot(self.f_vec - self.f_res, Pe, ".", label="Experimental data")
         # Fit data
         out = qubit_frequency_tracking._fit_ramsey(self.f_vec - self.f_res, Pe)
         # amplitude of the frequency domain oscillations used to derive the scale factor in two_point_ramsey
@@ -404,7 +430,7 @@ class qubit_frequency_tracking:
         # i.e. detuning to go from resonance to  half fringe
         self.delta = int(1 / (self.dephasing_time * 4e-9) / 4)  # the last 4 is for 1/4 of a cycle (dephasing of pi/2)
         # Plot fit
-        plt.plot(self.f_vec - self.f_res, out["fit_func"](self.f_vec - self.f_res), "m", label='fit')
+        plt.plot(self.f_vec - self.f_res, out["fit_func"](self.f_vec - self.f_res), "m", label="fit")
         # Plot specific points at half the central fringe
         plt.plot(
             [-self.delta, self.delta],
@@ -424,7 +450,9 @@ class qubit_frequency_tracking:
         # Scale factor to convert amplitude to frequency change: frequency_sweep_amp is the amplitude of the frequency
         # domain oscillation. The factor 4e-9 is to convert tau from clock cycles to sec.
         # TODO: why no exp(-tau/T2)?
-        scale_factor = int(1 / (2 * np.pi * self.dephasing_time * 4e-9 * self.frequency_sweep_amp))  # in Hz per unit of I, Q or state
+        scale_factor = int(
+            1 / (2 * np.pi * self.dephasing_time * 4e-9 * self.frequency_sweep_amp)
+        )  # in Hz per unit of I, Q or state
         # Average value of the measured quantity (I, state, np.sqrt(I**2+Q**2)...) on both sides of the central fringe.
         assign(self.two_point_vec[0], 0)  # Left side
         assign(self.two_point_vec[1], 0)  # Right side
@@ -440,25 +468,42 @@ class qubit_frequency_tracking:
                 reset_qubit("cooldown", cooldown_time=1000)
                 ####################################################################################################
                 # Set qubit frequency
-                update_frequency(self.qubit, self.f)
+                if self.frame_rotation:
+                    update_frequency(self.qubit, self.f_res_corr)
+                else:
+                    update_frequency(self.qubit, self.f)
                 # Ramsey sequence
                 play("x90", self.qubit)
                 wait(self.dephasing_time, self.qubit)
+                if self.frame_rotation:
+                    if self.frame_rotation:
+                        assign(
+                            self.frame_rotation_detuning,
+                            Cast.mul_fixed_by_int(self.Hz_to_GHz, self.f - self.f_res_corr),
+                        )
+                        frame_rotation_2pi(
+                            Cast.mul_fixed_by_int(self.frame_rotation_detuning, 4 * self.dephasing_time), self.qubit
+                        )
                 play("x90", self.qubit)
 
                 align(self.qubit, self.rr)
                 # should be replaced by the readout procedure of the qubit. A boolean value should be assigned into
                 # the QUA variable "self.res". True for the qubit in the excited.
+
                 measure(
                     "readout",
                     "resonator",
                     None,
                     dual_demod.full("cos", "out1", "sin", "out2", self.I),
                 )
+                if self.frame_rotation:
+                    reset_frame(self.qubit)
                 assign(self.res, self.I > self.ge_threshold)
                 ####################################################################################################
                 # Sum the results and divide by the number of iterations to get the average on the fly
-                assign(self.two_point_vec[self.idx], self.two_point_vec[self.idx] + (Cast.to_fixed(self.res) >> power_of_2))
+                assign(
+                    self.two_point_vec[self.idx], self.two_point_vec[self.idx] + (Cast.to_fixed(self.res) >> power_of_2)
+                )
                 # Go to the right side of the central fringe
                 assign(self.f, self.f + 2 * self.delta)
 
