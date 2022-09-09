@@ -16,7 +16,7 @@ qmm = QuantumMachinesManager(qop_ip, port=85)
 qm = qmm.open_qm(config)
 
 # Initialize object
-freq_track_obj = qubit_frequency_tracking("qubit", "resonator", qubit_IF, ge_threshold)
+freq_track_obj = qubit_frequency_tracking("qubit", "resonator", qubit_IF, ge_threshold, True)
 
 
 ########################
@@ -89,7 +89,7 @@ with program() as prog:
         freq_track_obj.time_domain_ramsey_full_sweep(n_avg, freq_track_obj.f_det, tau_vec, True)
         save(i, i_st)
     with stream_processing():
-        freq_track_obj.state_estimation_st[0].buffer(len(tau_vec)).average().save("Pe_td_ref" )
+        freq_track_obj.state_estimation_st[0].buffer(len(tau_vec)).average().save("Pe_td_ref")
         freq_track_obj.state_estimation_st[1].buffer(len(tau_vec)).average().save("Pe_td_corr")
         i_st.save("iteration")
         freq_track_obj.f_res_corr_st.save_all("f_res_corr")

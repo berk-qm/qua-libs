@@ -137,13 +137,21 @@ def active_reset(threshold, max_tries=1, Ig=None):
 # Frequency tracking class
 class qubit_frequency_tracking:
     def __init__(self, qubit, rr, f_res, ge_threshold, frame_rotation_flag=False):
+        """Frequency tracking class
+
+        :param str qubit: The qubit element from the configuration
+        :param str rr: The readout element from the configuration
+        :param int f_res: The initial guess for the qubit resonance frequency in Hz
+        :param float ge_threshold: Threshold to discriminate between ground and excited (with single shot readout)
+        :param bool frame_rotation_flag: Flag to perform the Ramsey scans by dephasing the 2nd pi/2 pulse instead of applying a detuning.
+        """
         # The qubit element
         self.qubit = qubit
         # The readout resonator element
         self.rr = rr
         # The qubit resonance frequency
         self.f_res = f_res
-        # Threshold to discriminating between ground and excited (with single shot readout)
+        # Threshold to discriminate between ground and excited (with single shot readout)
         self.ge_threshold = ge_threshold
         # Ramsey dephasing (idle) time in clock cycles (4ns)
         self.dephasing_time = None
@@ -278,7 +286,7 @@ class qubit_frequency_tracking:
         :param int n_avg: python integer for the number of averaging loops
         :param int f_det: python integer for the detuning to apply in Hz
         :param tau_vec: numpy array of integers for the idle times to be scanned in clock cycles (4ns)
-        :param bool correct: boolean for
+        :param bool correct: boolean flag for choosing to use the initial qubit frequency or the corrected one
         :return: None
         """
         # Declare the QUA variables once
@@ -359,13 +367,12 @@ class qubit_frequency_tracking:
         )
         plt.legend()
 
-    def freq_domain_ramsey_full_sweep(self, n_avg, f_vec, oscillation_number=1, correct=False):
+    def freq_domain_ramsey_full_sweep(self, n_avg, f_vec, oscillation_number=1):
         """QUA program to perform a frequency-domain Ramsey sequence with `n_avg` averages and scanning the frequency over `f_vec`.
 
         :param int n_avg: python integer for the number of averaging loops
         :param f_vec: numpy array of integers for the qubit detuning to be scanned in Hz
         :param oscillation_number: number of oscillations to capture used to define the idle time.
-        :param correct:
         :return:
         """
 
