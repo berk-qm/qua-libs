@@ -456,9 +456,9 @@ class qubit_frequency_tracking:
         :param int n_avg_power_of_2: power of two defining the number of averages as n_avg=2**n_avg_power_of_2
         :return:
         """
-        if (not np.log2(2**n_avg_power_of_2).is_integer()) or (n_avg_power_of_2 > 20):
+        if n_avg_power_of_2 > 20 or np.log2(2 ** n_avg_power_of_2).is_integer():
             raise ValueError("'n_avg_power_of_2' must be defined as the power of two defining the number of averages (n_avg=2**n_avg_power_of_2)")
-        # Declare the QUA variables once
+         # Declare the QUA variables once
         if self.init:
             self._qua_declaration()
             self.init = False
