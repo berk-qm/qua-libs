@@ -29,7 +29,7 @@ def IQ_imbalance(g, phi):
 # VARIABLES #
 #############
 u = unit()
-qop_ip = "172.16.2.103"#"127.0.0.1"
+qop_ip = "127.0.0.1"
 
 # Qubits
 qubit_IF = 50 * u.MHz

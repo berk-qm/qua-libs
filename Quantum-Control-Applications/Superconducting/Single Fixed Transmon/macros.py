@@ -456,9 +456,11 @@ class qubit_frequency_tracking:
         :param int n_avg_power_of_2: power of two defining the number of averages as n_avg=2**n_avg_power_of_2
         :return:
         """
-        if n_avg_power_of_2 > 20 or np.log2(2 ** n_avg_power_of_2).is_integer():
-            raise ValueError("'n_avg_power_of_2' must be defined as the power of two defining the number of averages (n_avg=2**n_avg_power_of_2)")
-         # Declare the QUA variables once
+        if n_avg_power_of_2 > 20 or np.log2(2**n_avg_power_of_2).is_integer():
+            raise ValueError(
+                "'n_avg_power_of_2' must be defined as the power of two defining the number of averages (n_avg=2**n_avg_power_of_2)"
+            )
+        # Declare the QUA variables once
         if self.init:
             self._qua_declaration()
             self.init = False
@@ -516,7 +518,8 @@ class qubit_frequency_tracking:
                 ####################################################################################################
                 # Sum the results and divide by the number of iterations to get the average on the fly
                 assign(
-                    self.two_point_vec[self.idx], self.two_point_vec[self.idx] + (Cast.to_fixed(self.res) >> n_avg_power_of_2)
+                    self.two_point_vec[self.idx],
+                    self.two_point_vec[self.idx] + (Cast.to_fixed(self.res) >> n_avg_power_of_2),
                 )
                 # Go to the right side of the central fringe
                 assign(self.f, self.f + 2 * self.delta)
