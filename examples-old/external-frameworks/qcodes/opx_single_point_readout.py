@@ -28,7 +28,7 @@ class OPXSinglePointReadout(OPX):
             "amp",
             unit="",
             initial_value=1,
-            vals=Numbers(0, 2),
+            vals=Numbers(-2, 2 - 2**-16),
             get_cmd=None,
             set_cmd=None,
         )
@@ -96,4 +96,4 @@ class OPXSinglePointReadout(OPX):
             )
             R = np.sqrt(I**2 + Q**2)
             phase = np.unwrap(np.angle(I + 1j * Q)) * 180 / np.pi
-            return I, Q, R, phase
+            return I, Q, R, phase  # Need to update to dict
