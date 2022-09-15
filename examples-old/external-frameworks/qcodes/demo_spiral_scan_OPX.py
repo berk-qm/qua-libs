@@ -32,7 +32,7 @@ initialise_or_create_database_at(db_file_path)
 
 experiment = load_or_create_experiment(experiment_name=exp_name, sample_name=sample_name)
 
-opx_spiral = OPXSpiralScan(config, host="172.16.2.103", port=85)
+opx_spiral = OPXSpiralScan(config)
 opx_spiral.Vx_center(0.0)
 opx_spiral.Vx_span(0.04)  # Scan defined as center +/- span/2
 opx_spiral.Vy_center(0.250)
