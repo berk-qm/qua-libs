@@ -43,7 +43,7 @@ do2d(
     100,
     0.0135,
     full_data,
-    enter_actions=opx_single_point.run_exp(),
-    exit_actions=opx_single_point.halt(),
+    enter_actions=[opx_single_point.run_exp],
+    exit_actions=[opx_single_point.halt],
     show_progress=True,
 )

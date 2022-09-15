@@ -44,7 +44,7 @@ do1d(
     1,
     opx_freq_scan.resume(),
     full_data,
-    enter_actions=opx_freq_scan.run_exp(),
-    exit_actions=opx_freq_scan.halt(),
+    enter_actions=[opx_freq_scan.run_exp],
+    exit_actions=[opx_freq_scan.halt],
     show_progress=True,
 )
