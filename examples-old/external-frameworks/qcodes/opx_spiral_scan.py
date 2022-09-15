@@ -99,7 +99,7 @@ class OPXSpiralScan(OPX):
         self.qm.set_output_dc_offset_by_element(y_element, "single", self.Vy_center())
         self.qm.set_output_dc_offset_by_element(x_element, "single", self.Vx_center())
         if self.n_avg() is None:
-            n_avg = round(self.t_meas() * 1e9 / self.readout_pulse_length())
+            self.n_avg(round(self.t_meas() * 1e9 / self.readout_pulse_length()))
         dx = round_to_fixed(2 * self.Vx_span() / ((self.N_points() - 1) * self.config["waveforms"]["jump_wf"].get("sample")))
         dy = round_to_fixed(2 * self.Vy_span() / ((self.N_points() - 1) * self.config["waveforms"]["jump_wf"].get("sample")))
         print(f"dx = {dx}")
@@ -120,7 +120,7 @@ class OPXSpiralScan(OPX):
 
             # declaring the measured variables and their streams
             I, Q = declare(fixed), declare(fixed)
-            I_stream, Q_stream = declare_stream(), declare_stream()
+            I_st, Q_st = declare_stream(), declare_stream()
 
             with for_(average, 0, average < self.n_avg(), average + 1):
                 # initialising variables
@@ -136,7 +136,7 @@ class OPXSpiralScan(OPX):
                 # for the first pixel it is unnecessary to move before measuring
                 measurement_macro(
                     measured_element=readout_element,
-                    I=I, I_stream=I_stream, Q=Q, Q_stream=Q_stream
+                    I=I, I_stream=I_st, Q=Q, Q_stream=Q_st
                 )
                 save(Vx, Vx_st)
                 save(Vy, Vy_st)
@@ -159,7 +159,7 @@ class OPXSpiralScan(OPX):
                         # Measurement
                         measurement_macro(
                             measured_element=readout_element,
-                            I=I, I_stream=I_stream, Q=Q, Q_stream=Q_stream
+                            I=I, I_stream=I_st, Q=Q, Q_stream=Q_st
                         )
                         save(Vx, Vx_st)
                         save(Vy, Vy_st)
@@ -180,7 +180,7 @@ class OPXSpiralScan(OPX):
                         # Measurement
                         measurement_macro(
                             measured_element=readout_element,
-                            I=I, I_stream=I_stream, Q=Q, Q_stream=Q_stream
+                            I=I, I_stream=I_st, Q=Q, Q_stream=Q_st
                         )
                         save(Vx, Vx_st)
                         save(Vy, Vy_st)
@@ -208,7 +208,7 @@ class OPXSpiralScan(OPX):
                         wait(self.wait_time(), readout_element)
                     # Measurement
                     measurement_macro(measured_element=readout_element,
-                                      I=I, I_stream=I_stream, Q=Q, Q_stream=Q_stream
+                                      I=I, I_stream=I_st, Q=Q, Q_stream=Q_st
                                       )
                     save(Vx, Vx_st)
                     save(Vy, Vy_st)
@@ -219,8 +219,8 @@ class OPXSpiralScan(OPX):
                 save(average, n_st)
 
             with stream_processing():
-                for stream_name, stream in zip(['I', 'Q', 'Vx', 'Vy'], [I_stream, Q_stream, Vx_st, Vy_st]):
-                    stream.buffer(self.N_points()*self.N_points()).average().save(stream_name)
+                I_st.buffer(self.N_points()*self.N_points()).average().save("I")
+                Q_st.buffer(self.N_points()*self.N_points()).average().save("Q")
                 n_st.save("iteration")
         return prog
 
@@ -236,48 +236,78 @@ class OPXSpiralScan(OPX):
         self.qm.resume()
         self.counter += 1
 
+
     def get_res(self):
-        if self.result_handles is None:
-            n = self.N_points()
-            return {"I": [[0]*n]*n, "Q": [[0]*n]*n, "R": [[0]*n]*n, "Phi": [[0]*n]*n, "Vx": [[0]*n]*n, "Vy": [[0]*n]*n}
-        else:
-            self.result_handles.wait_for_all_values()
-            order = spiral(self.N_points())
 
-            I = self.result_handles.get("I").fetch_all() / self.config["pulses"]["readout_pulse"]["length"] * 2**12
-            Q = self.result_handles.get("Q").fetch_all() / self.config["pulses"]["readout_pulse"]["length"] * 2**12
-            R = np.sqrt(I**2 + Q**2)
-            phase = np.unwrap(np.angle(I + 1j * Q)) * 180 / np.pi
-            Vx = self.result_handles.get("Vx").fetch_all() + self.Vx_center()
-            Vy = self.result_handles.get("Vy").fetch_all() + self.Vy_center()
-            return {"I": I[order], "Q": Q[order], "R": R[order], "Phi": phase[order], "Vx": Vx[order], "Vy": Vy[order]}
+            if self.result_handles is None:
+                n = self.N_points()
+                return {"I": [[0] * n] * n, "Q": [[0] * n] * n, "R": [[0] * n] * n, "Phi": [[0] * n] * n,
+                        "Vx": [[0] * n] * n, "Vy": [[0] * n] * n}
+            else:
+                order = spiral(self.N_points())
+                if self.live_plot:
+                    if self.live_in_python:
+                        results = fetching_tool(self.job, ["I", "Q", "iteration"], mode="live")
+                        fig = plt.figure()
+                        interrupt_on_close(fig, self.job)
+                        while results.is_processing():
+                            I, Q, iteration = results.fetch_all()
+                            progress_counter(iteration, self.n_avg(), start_time=results.start_time)
 
-    # def get_res(self):
-    #     if self.result_handles is None:
-    #         n = self.N_points()
-    #         return {"I": [[0] * n] * n, "Q": [[0] * n] * n, "R": [[0] * n] * n, "Phi": [[0] * n] * n,
-    #                 "Vx": [[0] * n] * n, "Vy": [[0] * n] * n}
-    #     else:
-    #         results = fetching_tool(self.job, ["I", "Q", "Vx", "Vy", "iteration"], mode="live")
-    #         fig = plt.figure()
-    #         interrupt_on_close(fig, self.job)
-    #         while results.is_processing():
-    #             I, Q, Vx,Vy,iteration = results.fetch_all()
-    #             progress_counter(iteration, self.n_avg(), start_time=results.start_time)
-    #             order = spiral(self.N_points())
-    #             # iteration = self.result_handles.get("iteration").fetch_all()
-    #             # I = self.result_handles.get("I").fetch_all() / self.config["pulses"]["readout_pulse"][
-    #             #     "length"] * 2 ** 12
-    #             # Q = self.result_handles.get("Q").fetch_all() / self.config["pulses"]["readout_pulse"][
-    #             #     "length"] * 2 ** 12
-    #             R = np.sqrt(I ** 2 + Q ** 2)
-    #             phase = np.unwrap(np.angle(I + 1j * Q)) * 180 / np.pi
-    #             # Vx = self.result_handles.get("Vx").fetch_all() + self.Vx_center()
-    #             # Vy = self.result_handles.get("Vy").fetch_all() + self.Vy_center()
-    #
-    #             plt.cla()
-    #             plt.pcolor(R[order])
-    #             # plt.title(f"{iteration}")
-    #             plt.pause(0.01)
-    #         return {"I": I[order], "Q": Q[order], "R": R[order], "Phi": phase[order], "Vx": Vx[order],
-    #                 "Vy": Vy[order]}
+                            I = I / self.config["pulses"]["readout_pulse"]["length"] * 2 ** 12
+                            Q = Q / self.config["pulses"]["readout_pulse"]["length"] * 2 ** 12
+                            R = np.sqrt(I ** 2 + Q ** 2)
+                            phase = np.unwrap(np.angle(I + 1j * Q)) * 180 / np.pi
+                            plt.subplot(221)
+                            plt.cla()
+                            plt.title("I [V]")
+                            plt.pcolor(self.Vx_axis(), self.Vy_axis(), I[order])
+                            plt.xlabel("Vx [V]")
+                            plt.ylabel("Vy [V]")
+                            plt.colorbar()
+                            plt.subplot(222)
+                            plt.cla()
+                            plt.title("Q [V]")
+                            plt.pcolor(self.Vx_axis(), self.Vy_axis(), Q[order])
+                            plt.xlabel("Vx [V]")
+                            plt.ylabel("Vy [V]")
+                            plt.colorbar()
+                            plt.subplot(223)
+                            plt.cla()
+                            plt.title("R [V]")
+                            plt.pcolor(self.Vx_axis(), self.Vy_axis(), R[order])
+                            plt.xlabel("Vx [V]")
+                            plt.ylabel("Vy [V]")
+                            plt.colorbar()
+                            plt.subplot(224)
+                            plt.cla()
+                            plt.title("phase [deg]")
+                            plt.pcolor(self.Vx_axis(), self.Vy_axis(), phase[order])
+                            plt.xlabel("Vx [V]")
+                            plt.ylabel("Vy [V]")
+                            plt.colorbar()
+                            plt.tight_layout()
+                            plt.pause(0.1)
+
+                    else:
+                        self.result_handles.get("I").wait_for_values(1)
+                        self.result_handles.get("Q").wait_for_values(1)
+                        self.result_handles.get("iteration").wait_for_values(1)
+
+                        I = self.result_handles.get("I").fetch_all() / self.config["pulses"]["readout_pulse"]["length"] * 2**12
+                        Q = self.result_handles.get("Q").fetch_all() / self.config["pulses"]["readout_pulse"]["length"] * 2**12
+                        R = np.sqrt(I**2 + Q**2)
+                        phase = np.unwrap(np.angle(I + 1j * Q)) * 180 / np.pi
+                        iteration = self.result_handles.get("iteration").fetch_all()
+                        progress_counter(iteration, self.n_avg())
+
+                else:
+                    self.result_handles.wait_for_all_values()
+                    I = self.result_handles.get("I").fetch_all() / self.config["pulses"]["readout_pulse"][
+                        "length"] * 2 ** 12
+                    Q = self.result_handles.get("Q").fetch_all() / self.config["pulses"]["readout_pulse"][
+                        "length"] * 2 ** 12
+                    R = np.sqrt(I ** 2 + Q ** 2)
+                    phase = np.unwrap(np.angle(I + 1j * Q)) * 180 / np.pi
+            return {"I": I[order], "Q": Q[order], "R": R[order], "Phi": phase[order]}
+

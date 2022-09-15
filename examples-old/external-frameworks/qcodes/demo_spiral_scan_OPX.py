@@ -19,7 +19,7 @@ from qcodes.utils.dataset.doNd import do2d, do0d, do1d
 from configuration import *
 import matplotlib.pyplot as plt
 import IPython.lib.backgroundjobs as bg
-# from plottr.apps import inspectr
+from plottr.apps import inspectr
 
 
 db_name = "QM_demo_spiral.db"  # Database name
@@ -43,12 +43,12 @@ opx_spiral.n_avg(10000)
 
 full_data = QMDemodParameters(
     opx_spiral,
-    ["I", "Q", "R", "Phi", "Vx", "Vy"],
+    ["I", "Q", "R", "Phi"],
     "spiral_scan",
-    names=["I", "Q", "R", "Phi", "Vx", "Vy"],
-    units=["V", "V", "V", "°", "V", "V"],
-    shapes=((opx_spiral.N_points(), opx_spiral.N_points()), ) * 6,
-    setpoints=((opx_spiral.Vx_axis(), opx_spiral.Vy_axis()),) * 6,
+    names=["I", "Q", "R", "Phi"],
+    units=["V", "V", "V", "°"],
+    shapes=((opx_spiral.N_points(), opx_spiral.N_points()), ) * 4,
+    setpoints=((opx_spiral.Vx_axis(), opx_spiral.Vy_axis()),) * 4,
 )
 station = qc.Station()
 station.add_component(opx_spiral)
@@ -60,17 +60,27 @@ if simulate:
     do0d(opx_spiral.simulate_exp(10000), full_data)
 else:
     # Execute and plot
-    # jobs = bg.BackgroundJobManager()
-    # jobs.new(inspectr.main, db_file_path)
-    # do0d(opx_spiral.run_exp(), full_data, exp=experiment, do_plot=False)
-    do1d(
-        COUNTER,
-        1,
-        9999,
-        10000,
-        1e-6,
-        full_data,
-        enter_actions=[opx_spiral.run_exp],
-        exit_actions=[opx_spiral.halt],
-        show_progress=True,
-    )
+    opx_spiral.live_plot = True
+    opx_spiral.live_in_python = True
+    if opx_spiral.live_plot:
+        if opx_spiral.live_in_python:
+            do0d(opx_spiral.run_exp, full_data, exp=experiment, do_plot=False)
+        else:
+            jobs = bg.BackgroundJobManager()
+            jobs.new(inspectr.main, db_file_path)
+            do1d(
+                COUNTER,
+                1,
+                40,
+                40,
+                0.01,
+                full_data,
+                enter_actions=[opx_spiral.run_exp],
+                exit_actions=[opx_spiral.halt],
+                write_period=0.1,
+                do_plot=False,
+            )
+    else:
+        jobs = bg.BackgroundJobManager()
+        jobs.new(inspectr.main, db_file_path)
+        do0d(opx_spiral.run_exp, full_data, exp=experiment, do_plot=False)

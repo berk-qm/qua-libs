@@ -11,7 +11,10 @@ from qcodes.utils.helpers import abstractmethod
 from qcodes.utils.validators import Numbers
 from qm import SimulationConfig
 from qm.QuantumMachinesManager import QuantumMachinesManager
-
+import matplotlib.pyplot as plt
+from qualang_tools.plot import interrupt_on_close
+from qualang_tools.results import fetching_tool, progress_counter
+from macros import round_to_fixed ,measurement_macro, spiral
 
 # noinspection PyAbstractClass
 class OPX(Instrument):
@@ -32,6 +35,8 @@ class OPX(Instrument):
         self.result_handles = None
         self.job = None
         self.prog_id = None
+        self.live_in_python = False
+        self.live_plot = False
         self.connect(host=host, port=port)
         self.set_config(config=config)
 
@@ -59,6 +64,7 @@ class OPX(Instrument):
     def execute_prog(self, prog):
         self.job = self.qm.execute(prog)
         self.result_handles = self.job.result_handles
+
 
     def simulate_prog(self, prog, duration=1000):
         self.job = self.qm.simulate(prog, SimulationConfig(duration))
