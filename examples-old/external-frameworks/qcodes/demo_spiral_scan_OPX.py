@@ -19,7 +19,7 @@ from qcodes.utils.dataset.doNd import do2d, do0d, do1d
 from configuration import *
 import matplotlib.pyplot as plt
 import IPython.lib.backgroundjobs as bg
-from plottr.apps import inspectr
+# from plottr.apps import inspectr
 
 
 db_name = "QM_demo_spiral.db"  # Database name
@@ -65,12 +65,12 @@ else:
     # do0d(opx_spiral.run_exp(), full_data, exp=experiment, do_plot=False)
     do1d(
         COUNTER,
-        0,
+        1,
         9999,
         10000,
         1e-6,
         full_data,
-        enter_actions=opx_spiral.run_exp(),
-        exit_actions=opx_spiral.halt(),
+        enter_actions=[opx_spiral.run_exp],
+        exit_actions=[opx_spiral.halt],
         show_progress=True,
     )

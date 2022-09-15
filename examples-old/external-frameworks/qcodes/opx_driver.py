@@ -81,9 +81,7 @@ class OPX(Instrument):
 
     def set_config(self, config):
         self.config = config
-        if self.qm is not None:
-            self.qm.close()
-        self.qm = self.qmm.open_qm(self.config, close_other_machines=False)
+        self.qm = self.qmm.open_qm(self.config, close_other_machines=True)
 
     def connect(self, host=None, port=None):
         self.qmm = QuantumMachinesManager(host=host, port=port)
@@ -92,10 +90,6 @@ class OPX(Instrument):
     def close(self) -> None:
         if self.qm is not None:
             self.qm.close()
-        super().close()
-
-    def close_all(self) -> None:
-        self.qmm.close_all_quantum_machines()
         super().close()
 
     def halt(self) -> None:
