@@ -12,6 +12,7 @@ lockin_freq = 80  # Hz
 # readout_pulse_length = round(1 / lockin_freq * 1e9)  # ns
 readout_repeats = 20  # To speed up compilation
 readout_pulse_length = round(1 / lockin_freq * 1e9 / readout_repeats)  # ns
+readout_pulse_length = 16
 cw_readout_pulse_length = int(100e3)
 
 cw_amp = 0.3
@@ -20,6 +21,9 @@ reflect_amp = 0.03
 
 block_amp = 0.3
 block_length = 20
+
+jump_amp = 0.25
+jump_length = 20
 
 pi_amp = 0.3
 pi_half_amp = 0.15
@@ -39,6 +43,8 @@ config = {
                 2: {"offset": 0.0},  # Qubit I
                 3: {"offset": 0.0},  # Qubit Q
                 4: {"offset": 0.0},  # RF SET
+                5: {"offset": 0.0},  # RF SET
+                6: {"offset": 0.0},  # RF SET
             },
             "digital_outputs": {
                 1: {},  # To indicate measure time
@@ -57,6 +63,24 @@ config = {
                 "block": "block_pulse",
             },
         },
+        "G1": {
+            "singleInput": {
+                "port": ("con1", 5),
+            },
+            "hold_offset": {"duration": 10},
+            "operations": {
+                "jump": "jump_pulse",
+            },
+        },
+        "G2": {
+            "singleInput": {
+                "port": ("con1", 6),
+            },
+            "hold_offset": {"duration": 10},
+            "operations": {
+                "jump": "jump_pulse",
+            },
+        },
         "qubit": {
             "mixInputs": {
                 "I": ("con1", 2),
@@ -70,7 +94,7 @@ config = {
                 "pi_half": "pi_half_pulse",
             },
         },
-        "readout": {
+        "resonator": {
             "singleInput": {
                 "port": ("con1", 4),
             },
@@ -83,13 +107,13 @@ config = {
             "outputs": {"out1": ("con1", 1)},
             "time_of_flight": 200,
             "smearing": 0,
-            "digitalInputs": {
-                "indicator": {
-                    "port": ("con1", 1),
-                    "delay": 0,
-                    "buffer": 0,
-                },
-            },
+            # "digitalInputs": {
+            #     "indicator": {
+            #         "port": ("con1", 1),
+            #         "delay": 0,
+            #         "buffer": 0,
+            #     },
+            # },
         },
     },
     "pulses": {
@@ -98,6 +122,13 @@ config = {
             "length": block_length,
             "waveforms": {
                 "single": "block_wf",
+            },
+        },
+        "jump_pulse": {
+            "operation": "control",
+            "length": jump_length,
+            "waveforms": {
+                "single": "jump_wf",
             },
         },
         "cw_pulse": {
@@ -136,10 +167,11 @@ config = {
             "operation": "measurement",
             "length": readout_pulse_length,
             "waveforms": {
-                "single": "zero_wf",
+                "single": "const_wf",
             },
             "integration_weights": {
-                "const": "cosine_weights",
+                "cos": "cosine_weights",
+                "sin": "sine_weights",
             },
             "digital_marker": "ON",
         },
@@ -172,6 +204,7 @@ config = {
         "const_wf": {"type": "constant", "sample": cw_amp},
         "reflect_wf": {"type": "constant", "sample": reflect_amp},
         "block_wf": {"type": "constant", "sample": block_amp},
+        "jump_wf": {"type": "constant", "sample": jump_amp},
         "zero_wf": {"type": "constant", "sample": 0.0},
         "gaussian_wf": {
             "type": "arbitrary",

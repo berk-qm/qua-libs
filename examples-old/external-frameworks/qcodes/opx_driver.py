@@ -62,6 +62,7 @@ class OPX(Instrument):
 
     def simulate_prog(self, prog, duration=1000):
         self.job = self.qm.simulate(prog, SimulationConfig(duration))
+        self.job.get_simulated_samples().con1.plot()
         self.result_handles = self.job.result_handles
 
     def simulate_and_read(self, prog):
@@ -91,6 +92,10 @@ class OPX(Instrument):
     def close(self) -> None:
         if self.qm is not None:
             self.qm.close()
+        super().close()
+
+    def close_all(self) -> None:
+        self.qmm.close_all_quantum_machines()
         super().close()
 
     def halt(self) -> None:
@@ -127,6 +132,23 @@ class OPX(Instrument):
     def get_idn(self) -> Dict[str, Optional[str]]:
         return self.qmm.version()
 
+class MyCounter(Parameter):
+    def __init__(self, name):
+        # only name is required
+        super().__init__(name, label='Times this has been read',
+                         vals=Numbers(1, 1e9),
+                         docstring='counts how many times get has been called '
+                                   'but can be reset to any integer >= 0 by set')
+        self._count = 0
+
+    # you must provide a get method, a set method, or both.
+    def get_raw(self):
+        self._count += 1
+        return self._count
+
+    def set_raw(self, val):
+        self._count = val
+        return self._count
 
 # noinspection PyAbstractClass
 class GeneratedSetPoints(Parameter):
@@ -144,6 +166,21 @@ class GeneratedSetPoints(Parameter):
     def get_raw(self):
         return np.linspace(self._startparam(), self._stopparam(), self._numpointsparam())
 
+# noinspection PyAbstractClass
+class GeneratedSetPointsSpan(Parameter):
+    """
+    A parameter that generates a setpoint array from start, stop and num points
+    parameters.
+    """
+
+    def __init__(self, spanparam, centerparam, numpointsparam, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._spanparam = spanparam
+        self._centerparam = centerparam
+        self._numpointsparam = numpointsparam
+
+    def get_raw(self):
+        return np.linspace(self._centerparam()-self._spanparam()/2, self._centerparam()+self._spanparam()/2, self._numpointsparam())
 
 # noinspection PyAbstractClass
 class QMDemodParameters(MultiParameter):
@@ -170,6 +207,10 @@ class QMDemodParameters(MultiParameter):
                 vals.append(result["R"])
             elif param.lower() == "phase" or param.lower() == "phi":
                 vals.append(result["Phi"])
+            elif param.lower() == "vx":
+                vals.append(result["Vx"])
+            elif param.lower() == "vy":
+                vals.append(result["Vy"])
             else:
                 raise NotImplementedError("Only X (I), Y (Q), R or Phase (Phi) are valid inputs")
         return tuple(vals)
