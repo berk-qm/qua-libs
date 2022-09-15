@@ -14,7 +14,7 @@ from qm.QuantumMachinesManager import QuantumMachinesManager
 import matplotlib.pyplot as plt
 from qualang_tools.plot import interrupt_on_close
 from qualang_tools.results import fetching_tool, progress_counter
-from macros import round_to_fixed ,measurement_macro, spiral
+from macros import round_to_fixed, measurement_macro, spiral
 
 # noinspection PyAbstractClass
 class OPX(Instrument):
@@ -64,7 +64,6 @@ class OPX(Instrument):
     def execute_prog(self, prog):
         self.job = self.qm.execute(prog)
         self.result_handles = self.job.result_handles
-
 
     def simulate_prog(self, prog, duration=1000):
         self.job = self.qm.simulate(prog, SimulationConfig(duration))
@@ -132,13 +131,16 @@ class OPX(Instrument):
     def get_idn(self) -> Dict[str, Optional[str]]:
         return self.qmm.version()
 
+
 class MyCounter(Parameter):
     def __init__(self, name):
         # only name is required
-        super().__init__(name, label='Times this has been read',
-                         vals=Numbers(1, 1e9),
-                         docstring='counts how many times get has been called '
-                                   'but can be reset to any integer >= 0 by set')
+        super().__init__(
+            name,
+            label="Times this has been read",
+            vals=Numbers(1, 1e9),
+            docstring="counts how many times get has been called " "but can be reset to any integer >= 0 by set",
+        )
         self._count = 0
 
     # you must provide a get method, a set method, or both.
@@ -149,6 +151,7 @@ class MyCounter(Parameter):
     def set_raw(self, val):
         self._count = val
         return self._count
+
 
 # noinspection PyAbstractClass
 class GeneratedSetPoints(Parameter):
@@ -166,6 +169,7 @@ class GeneratedSetPoints(Parameter):
     def get_raw(self):
         return np.linspace(self._startparam(), self._stopparam(), self._numpointsparam())
 
+
 # noinspection PyAbstractClass
 class GeneratedSetPointsSpan(Parameter):
     """
@@ -180,7 +184,12 @@ class GeneratedSetPointsSpan(Parameter):
         self._numpointsparam = numpointsparam
 
     def get_raw(self):
-        return np.linspace(self._centerparam()-self._spanparam()/2, self._centerparam()+self._spanparam()/2, self._numpointsparam())
+        return np.linspace(
+            self._centerparam() - self._spanparam() / 2,
+            self._centerparam() + self._spanparam() / 2,
+            self._numpointsparam(),
+        )
+
 
 # noinspection PyAbstractClass
 class QMDemodParameters(MultiParameter):

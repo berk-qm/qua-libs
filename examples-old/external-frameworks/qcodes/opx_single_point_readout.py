@@ -88,13 +88,20 @@ class OPXSinglePointReadout(OPX):
         if self.result_handles is None:
             return {"I": 0, "Q": 0, "R": 0, "Phi": 0}
         else:
-            self.result_handles.wait_for_all_values()
-            I = self.result_handles.get("I").fetch_all() / self.config["pulses"]["readout_pulse"][
-                "length"] * 2 ** 12
-            Q = self.result_handles.get("Q").fetch_all() / self.config["pulses"]["readout_pulse"][
-                "length"] * 2 ** 12
-            R = np.sqrt(I ** 2 + Q ** 2)
+            self.result_handles.get("I").wait_for_values(self.counter)
+            self.result_handles.get("Q").wait_for_values(self.counter)
+            I = (
+                self.result_handles.get("I").fetch(self.counter - 1)["value"]
+                / self.readout_pulse_length()
+                * 2**12
+                * 2
+            )
+            Q = (
+                self.result_handles.get("Q").fetch(self.counter - 1)["value"]
+                / self.readout_pulse_length()
+                * 2**12
+                * 2
+            )
+            R = np.sqrt(I**2 + Q**2)
             phase = np.unwrap(np.angle(I + 1j * Q)) * 180 / np.pi
         return {"I": I, "Q": Q, "R": R, "Phi": phase}
-
-

@@ -140,9 +140,9 @@ class OPXSpectrumScan(OPX):
                         I, Q, iteration = results.fetch_all()
                         # progress_counter(iteration, self.n_avg(), start_time=results.start_time)
 
-                        I = I / self.config["pulses"]["readout_pulse"]["length"] * 2 ** 12
-                        Q = Q / self.config["pulses"]["readout_pulse"]["length"] * 2 ** 12
-                        R = np.sqrt(I ** 2 + Q ** 2)
+                        I = I / self.config["pulses"]["readout_pulse"]["length"] * 2**12
+                        Q = Q / self.config["pulses"]["readout_pulse"]["length"] * 2**12
+                        R = np.sqrt(I**2 + Q**2)
                         phase = np.unwrap(np.angle(I + 1j * Q)) * 180 / np.pi
                         plt.subplot(221)
                         plt.cla()
@@ -172,8 +172,16 @@ class OPXSpectrumScan(OPX):
                     self.result_handles.get("Q").wait_for_values(1)
                     self.result_handles.get("iteration").wait_for_values(1)
 
-                    I = self.result_handles.get("I").fetch_all() / self.config["pulses"]["readout_pulse"]["length"] * 2**12
-                    Q = self.result_handles.get("Q").fetch_all() / self.config["pulses"]["readout_pulse"]["length"] * 2**12
+                    I = (
+                        self.result_handles.get("I").fetch_all()
+                        / self.config["pulses"]["readout_pulse"]["length"]
+                        * 2**12
+                    )
+                    Q = (
+                        self.result_handles.get("Q").fetch_all()
+                        / self.config["pulses"]["readout_pulse"]["length"]
+                        * 2**12
+                    )
                     R = np.sqrt(I**2 + Q**2)
                     phase = np.unwrap(np.angle(I + 1j * Q)) * 180 / np.pi
                     iteration = self.result_handles.get("iteration").fetch_all()
@@ -181,10 +189,16 @@ class OPXSpectrumScan(OPX):
 
             else:
                 self.result_handles.wait_for_all_values()
-                I = self.result_handles.get("I").fetch_all() / self.config["pulses"]["readout_pulse"][
-                    "length"] * 2 ** 12
-                Q = self.result_handles.get("Q").fetch_all() / self.config["pulses"]["readout_pulse"][
-                    "length"] * 2 ** 12
-                R = np.sqrt(I ** 2 + Q ** 2)
+                I = (
+                    self.result_handles.get("I").fetch_all()
+                    / self.config["pulses"]["readout_pulse"]["length"]
+                    * 2**12
+                )
+                Q = (
+                    self.result_handles.get("Q").fetch_all()
+                    / self.config["pulses"]["readout_pulse"]["length"]
+                    * 2**12
+                )
+                R = np.sqrt(I**2 + Q**2)
                 phase = np.unwrap(np.angle(I + 1j * Q)) * 180 / np.pi
         return {"I": I, "Q": Q, "R": R, "Phi": phase}

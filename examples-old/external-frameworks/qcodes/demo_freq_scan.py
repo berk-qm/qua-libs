@@ -22,7 +22,7 @@ initialise_or_create_database_at(db_file_path)
 experiment = load_or_create_experiment(experiment_name=exp_name, sample_name=sample_name)
 
 station = qc.Station()
-opx_freq_scan = OPXSpectrumScan(config, host = "172.16.2.103", port=85)
+opx_freq_scan = OPXSpectrumScan(config, host="172.16.2.103", port=85)
 station.add_component(opx_freq_scan)
 
 opx_freq_scan.f_start(200.85e6)

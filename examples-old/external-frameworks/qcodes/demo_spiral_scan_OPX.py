@@ -2,17 +2,19 @@ import os
 
 import qcodes as qc
 from qcodes import initialise_or_create_database_at, load_or_create_experiment
-from qcodes import (Measurement,
-                    experiments,
-                    initialise_database,
-                    initialise_or_create_database_at,
-                    load_by_guid,
-                    load_by_run_spec,
-                    load_experiment,
-                    load_last_experiment,
-                    load_or_create_experiment,
-                    new_experiment,
-                    ManualParameter)
+from qcodes import (
+    Measurement,
+    experiments,
+    initialise_database,
+    initialise_or_create_database_at,
+    load_by_guid,
+    load_by_run_spec,
+    load_experiment,
+    load_last_experiment,
+    load_or_create_experiment,
+    new_experiment,
+    ManualParameter,
+)
 from qcodes.dataset.plotting import plot_dataset
 from opx_spiral_scan import *
 from qcodes.utils.dataset.doNd import do2d, do0d, do1d
@@ -36,7 +38,7 @@ opx_spiral = OPXSpiralScan(config)
 opx_spiral.Vx_center(0.0)
 opx_spiral.Vx_span(0.04)  # Scan defined as center +/- span/2
 opx_spiral.Vy_center(0.250)
-opx_spiral.Vy_span(0.1)   # Scan defined as center +/- span/2
+opx_spiral.Vy_span(0.1)  # Scan defined as center +/- span/2
 opx_spiral.N_points(51)  # Must be odd !
 opx_spiral.wait_time(100)
 opx_spiral.n_avg(10000)
@@ -47,7 +49,7 @@ full_data = QMDemodParameters(
     "spiral_scan",
     names=["I", "Q", "R", "Phi"],
     units=["V", "V", "V", "°"],
-    shapes=((opx_spiral.N_points(), opx_spiral.N_points()), ) * 4,
+    shapes=((opx_spiral.N_points(), opx_spiral.N_points()),) * 4,
     setpoints=((opx_spiral.Vx_axis(), opx_spiral.Vy_axis()),) * 4,
 )
 station = qc.Station()

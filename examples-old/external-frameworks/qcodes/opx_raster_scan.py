@@ -87,8 +87,8 @@ class OPXRasterScan(OPX):
         self.qm.set_output_dc_offset_by_element(y_element, "single", self.Vy_min())
         self.qm.set_output_dc_offset_by_element(x_element, "single", self.Vx_min())
         # n_avg = round(self.t_meas() * 1e9 / self.readout_pulse_length())
-        dy = (self.Vy_max() - self.Vy_min()) / ((self.Ny()-1) * self.config["waveforms"]["jump_wf"]["sample"])
-        dx = (self.Vx_max() - self.Vx_min()) / ((self.Nx()-1) * self.config["waveforms"]["jump_wf"]["sample"])
+        dy = (self.Vy_max() - self.Vy_min()) / ((self.Ny() - 1) * self.config["waveforms"]["jump_wf"]["sample"])
+        dx = (self.Vx_max() - self.Vx_min()) / ((self.Nx() - 1) * self.config["waveforms"]["jump_wf"]["sample"])
         print(f"dx = {dx}")
         print(f"dy = {dy}")
         with program() as prog:
@@ -105,26 +105,29 @@ class OPXRasterScan(OPX):
             Q_st = declare_stream()
             # play("const", "G2")
             with for_(n, 0, n < self.n_avg(), n + 1):
-                ramp_to_zero(x_element, duration = 4)
-                ramp_to_zero(y_element, duration = 4)
+                ramp_to_zero(x_element, duration=4)
+                ramp_to_zero(y_element, duration=4)
                 assign(Vx, self.Vx_min())
                 assign(Vy, self.Vy_min())
                 with for_(y, 0, y < self.Ny(), y + 1):
-                    with if_(y>0):
+                    with if_(y > 0):
                         play("jump" * amp(dy), y_element)
                         assign(Vy, Vy + dy * self.config["waveforms"]["jump_wf"]["sample"])
-                    ramp_to_zero(x_element, duration = 4)
+                    ramp_to_zero(x_element, duration=4)
                     assign(Vx, self.Vx_min())
                     with for_(x, 0, x < self.Nx(), x + 1):
                         with if_(x > 0):
                             play("jump" * amp(dx), x_element)
-                            assign(Vx, Vx + dx* self.config["waveforms"]["jump_wf"]["sample"])
+                            assign(Vx, Vx + dx * self.config["waveforms"]["jump_wf"]["sample"])
                         align()
                         wait(100, readout_element)
-                        measure("readout", readout_element, None,
-                                demod.full("cos", I, "out1"),
-                                demod.full("sin", Q, "out1"),
-                                )
+                        measure(
+                            "readout",
+                            readout_element,
+                            None,
+                            demod.full("cos", I, "out1"),
+                            demod.full("sin", Q, "out1"),
+                        )
                         save(Vx, Vx_st)
                         save(Vy, Vy_st)
                         save(I, I_st)
@@ -149,12 +152,18 @@ class OPXRasterScan(OPX):
         self.job.resume()
         self.counter += 1
 
-
     def get_res(self):
         if self.result_handles is None:
             nx = self.Nx()
             ny = self.Ny()
-            return {"I": [[0]*nx]*ny, "Q": [[0]*nx]*ny, "R": [[0]*nx]*ny, "Phi": [[0]*nx]*ny, "Vx": [[0]*nx]*ny, "Vy": [[0]*nx]*ny}
+            return {
+                "I": [[0] * nx] * ny,
+                "Q": [[0] * nx] * ny,
+                "R": [[0] * nx] * ny,
+                "Phi": [[0] * nx] * ny,
+                "Vx": [[0] * nx] * ny,
+                "Vy": [[0] * nx] * ny,
+            }
         else:
             self.result_handles.wait_for_all_values()
             I = self.result_handles.get("I").fetch_all() / self.config["pulses"]["readout_pulse"]["length"] * 2**12
