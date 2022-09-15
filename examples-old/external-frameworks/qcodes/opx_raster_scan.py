@@ -146,7 +146,7 @@ class OPXRasterScan(OPX):
         self.counter = 0
 
     def resume(self):
-        self.qm.resume()
+        self.job.resume()
         self.counter += 1
 
 

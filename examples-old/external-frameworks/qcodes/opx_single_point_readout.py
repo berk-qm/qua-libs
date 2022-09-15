@@ -25,6 +25,14 @@ class OPXSinglePointReadout(OPX):
             set_cmd=None,
         )
         self.add_parameter(
+            "n_avg",
+            unit="",
+            initial_value=1,
+            vals=Numbers(1, 1e9),
+            get_cmd=None,
+            set_cmd=None,
+        )
+        self.add_parameter(
             "amp",
             unit="",
             initial_value=1,
@@ -41,20 +49,20 @@ class OPXSinglePointReadout(OPX):
         )
 
     def get_prog(self):
-        n_avg = round(self.t_meas() * 1e9 / self.readout_pulse_length())
+        # n_avg = round(self.t_meas() * 1e9 / self.readout_pulse_length())
         with program() as prog:
             n = declare(int)
             I = declare(fixed)
             Q = declare(fixed)
             I_st = declare_stream()
             Q_st = declare_stream()
-            update_frequency("readout", self.f())
+            update_frequency("resonator", round(self.f()))
             with infinite_loop_():
                 pause()
-                with for_(n, 0, n < n_avg, n + 1):
+                with for_(n, 0, n < self.n_avg(), n + 1):
                     measure(
                         "cw_reflectometry" * amp(self.amp()),
-                        "readout",
+                        "resonator",
                         None,
                         demod.full("cos", I, "out1"),
                         demod.full("sin", Q, "out1"),
@@ -63,8 +71,8 @@ class OPXSinglePointReadout(OPX):
                     save(Q, Q_st)
 
             with stream_processing():
-                I_st.buffer(n_avg).map(FUNCTIONS.average()).save_all("I")
-                Q_st.buffer(n_avg).map(FUNCTIONS.average()).save_all("Q")
+                I_st.buffer(self.n_avg()).map(FUNCTIONS.average()).save_all("I")
+                Q_st.buffer(self.n_avg()).map(FUNCTIONS.average()).save_all("Q")
 
         return prog
 
@@ -73,27 +81,20 @@ class OPXSinglePointReadout(OPX):
         self.counter = 0
 
     def resume(self):
-        self.qm.resume()
+        self.job.resume()
         self.counter += 1
 
     def get_res(self):
         if self.result_handles is None:
-            return 0, 0, 0, 0
+            return {"I": 0, "Q": 0, "R": 0, "Phi": 0}
         else:
-            self.result_handles.get("I").wait_for_values(self.counter)
-            self.result_handles.get("Q").wait_for_values(self.counter)
-            I = (
-                self.result_handles.get("I").fetch(self.counter - 1)["value"]
-                / self.readout_pulse_length()
-                * 2**12
-                * 2
-            )
-            Q = (
-                self.result_handles.get("Q").fetch(self.counter - 1)["value"]
-                / self.readout_pulse_length()
-                * 2**12
-                * 2
-            )
-            R = np.sqrt(I**2 + Q**2)
+            self.result_handles.wait_for_all_values()
+            I = self.result_handles.get("I").fetch_all() / self.config["pulses"]["readout_pulse"][
+                "length"] * 2 ** 12
+            Q = self.result_handles.get("Q").fetch_all() / self.config["pulses"]["readout_pulse"][
+                "length"] * 2 ** 12
+            R = np.sqrt(I ** 2 + Q ** 2)
             phase = np.unwrap(np.angle(I + 1j * Q)) * 180 / np.pi
-            return I, Q, R, phase  # Need to update to dict
+        return {"I": I, "Q": Q, "R": R, "Phi": phase}
+
+

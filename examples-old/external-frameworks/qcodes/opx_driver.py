@@ -198,6 +198,7 @@ class QMDemodParameters(MultiParameter):
         vals = []
 
         result = self._instr.get_res()
+        print(result)
         for param in self._params:
             if param.lower() == "x" or param.lower() == "i":
                 vals.append(result["I"])
