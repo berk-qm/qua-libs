@@ -277,7 +277,10 @@ class OPXSpiralScan(OPX):
                 "Vy": [[0] * n] * n,
             }
         else:
-            I = 0; Q = 0; R = 0; phase = 0
+            I = 0
+            Q = 0
+            R = 0
+            phase = 0
             order = spiral(self.n_points()).T
             if self.live_plot:
                 if self.live_in_python:

@@ -37,8 +37,13 @@ class OPX(Instrument):
         self.prog_id = None
         self.live_in_python = False
         self.live_plot = False
-        self.connect(host=host, port=port)
+        self.simulated_wf = {}
+        # Open QMM
+        self.connect_to_qmm(host=host, port=port)
+        # Set config
         self.set_config(config=config)
+        # Open QM
+        self.open_qm()
 
         self.add_parameter("results", label="results", get_cmd=self.get_res)
 
@@ -65,13 +70,20 @@ class OPX(Instrument):
         self.job = self.qm.execute(prog)
         self.result_handles = self.job.result_handles
 
-    def simulate_prog(self, prog, duration=1000):
-        self.job = self.qm.simulate(prog, SimulationConfig(duration))
-        self.job.get_simulated_samples().con1.plot()
+    def simulate_prog(self, prog):
+        self.job = self.qm.simulate(prog, SimulationConfig(self.sim_time() // 4))
+        self.simulated_wf["analog"] = self.job.get_simulated_samples().con1.analog
+        self.simulated_wf["digital"] = self.job.get_simulated_samples().con1.digital
         self.result_handles = self.job.result_handles
 
+    def plot_simulated_wf(self):
+        plt.figure()
+        self.job.get_simulated_samples().con1.plot()
+        plt.ylabel("Output [V]")
+        plt.title("Simulated waveforms")
+
     def simulate_and_read(self, prog):
-        self.simulate_prog(prog, duration=self.sim_time())
+        self.simulate_prog(prog)
         self.result_handles.wait_for_all_values()
         return self.get_res()
 
@@ -84,13 +96,15 @@ class OPX(Instrument):
             self.job = pending_job.wait_for_execution()
             self.result_handles = self.job.result_handles
 
-    def set_config(self, config):
-        self.config = config
-        self.qm = self.qmm.open_qm(self.config, close_other_machines=True)
-
-    def connect(self, host=None, port=None):
+    def connect_to_qmm(self, host=None, port=None):
         self.qmm = QuantumMachinesManager(host=host, port=port)
         self.connect_message()
+
+    def set_config(self, config):
+        self.config = config
+
+    def open_qm(self):
+        self.qm = self.qmm.open_qm(self.config, close_other_machines=True)
 
     def close(self) -> None:
         if self.qm is not None:
@@ -205,9 +219,7 @@ class QMDemodParameters(MultiParameter):
 
     def get_raw(self):
         vals = []
-
         result = self._instr.get_res()
-        print(result)
         for param in self._params:
             if param.lower() == "x" or param.lower() == "i":
                 vals.append(result["I"])
@@ -217,10 +229,6 @@ class QMDemodParameters(MultiParameter):
                 vals.append(result["R"])
             elif param.lower() == "phase" or param.lower() == "phi":
                 vals.append(result["Phi"])
-            elif param.lower() == "vx":
-                vals.append(result["Vx"])
-            elif param.lower() == "vy":
-                vals.append(result["Vy"])
             else:
                 raise NotImplementedError("Only X (I), Y (Q), R or Phase (Phi) are valid inputs")
         return tuple(vals)

@@ -33,7 +33,7 @@ experiment = load_or_create_experiment(experiment_name=exp_name, sample_name=sam
 ######################
 # Program parameters #
 ######################
-#
+
 opx_spiral = OPXSpiralScan(config, host=qop_ip, port=qop_port)
 opx_spiral.readout_element("resonator")  # readout_element
 opx_spiral.x_element("G2")  # x_element
