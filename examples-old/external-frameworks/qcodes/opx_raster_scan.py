@@ -185,8 +185,6 @@ class OPXRasterScan(OPX):
             with stream_processing():
                 I_st.buffer(self.Nx()).buffer(self.Ny()).average().save("I")
                 Q_st.buffer(self.Nx()).buffer(self.Ny()).average().save("Q")
-                # Vx_st.buffer(self.Nx()).buffer(self.Ny()).save("Vx")
-                # Vy_st.buffer(self.Nx()).buffer(self.Ny()).save("Vy")
                 n_st.save("iteration")
 
         return prog

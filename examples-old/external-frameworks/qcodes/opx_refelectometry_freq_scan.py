@@ -16,7 +16,6 @@ class OPXSpectrumScan(OPX):
             get_cmd=None,
             set_cmd=None,
         )
-
         self.add_parameter(
             "f_stop",
             initial_value=70e6,
@@ -26,20 +25,13 @@ class OPXSpectrumScan(OPX):
             get_cmd=None,
             set_cmd=None,
         )
-
         self.add_parameter(
             "n_points",
             initial_value=100,
             unit="",
-            vals=Numbers(1, 1e9),
-            get_cmd=None,
-            set_cmd=None,
-        )
-        self.add_parameter(
-            "t_meas",
-            unit="s",
-            initial_value=0.01,
-            vals=Numbers(0, 1),
+            vals=Numbers(
+                1,
+            ),
             get_cmd=None,
             set_cmd=None,
         )
@@ -47,7 +39,9 @@ class OPXSpectrumScan(OPX):
             "n_avg",
             unit="",
             initial_value=1,
-            vals=Numbers(1, 1e9),
+            vals=Numbers(
+                1,
+            ),
             get_cmd=None,
             set_cmd=None,
         )
@@ -65,7 +59,7 @@ class OPXSpectrumScan(OPX):
             "amp",
             unit="",
             initial_value=1,
-            vals=Numbers(0, 2),
+            vals=Numbers(-2, 2 - 2**-28),
             get_cmd=None,
             set_cmd=None,
         )
@@ -76,11 +70,23 @@ class OPXSpectrumScan(OPX):
             get_cmd=None,
             set_cmd=None,
         )
+        self.add_parameter(
+            "readout_element",
+            unit="",
+            initial_value="resonator",
+            get_cmd=None,
+            set_cmd=None,
+        )
+        self.add_parameter(
+            "readout_operation",
+            unit="",
+            initial_value="readout",
+            get_cmd=None,
+            set_cmd=None,
+        )
 
     def get_prog(self):
         df = round((self.f_stop() - self.f_start()) / self.n_points())
-        # n_avg = round(self.t_meas() * 1e9 / self.readout_pulse_length())
-        # print(n_avg)
         with program() as prog:
             n = declare(int)
             f = declare(int)
@@ -91,10 +97,10 @@ class OPXSpectrumScan(OPX):
             Q_st = declare_stream()
             with for_(n, 0, n < self.n_avg(), n + 1):
                 with for_(f, self.f_start(), f < self.f_stop(), f + df):
-                    update_frequency("resonator", f)
+                    update_frequency(self.readout_element(), f)
                     measure(
-                        "cw_reflectometry" * amp(self.amp()),
-                        "resonator",
+                        self.readout_operation() * amp(self.amp()),
+                        self.readout_element(),
                         None,
                         demod.full("cos", I, "out1"),
                         demod.full("sin", Q, "out1"),
@@ -105,7 +111,7 @@ class OPXSpectrumScan(OPX):
             with stream_processing():
                 I_st.buffer(self.n_points()).average().save("I")
                 Q_st.buffer(self.n_points()).average().save("Q")
-                n_st.buffer(self.n_points()).average().save("iteration")
+                n_st.save("iteration")
 
         return prog
 
@@ -131,6 +137,10 @@ class OPXSpectrumScan(OPX):
             n = self.n_points()
             return {"I": [[0] * n] * n, "Q": [[0] * n] * n, "R": [[0] * n] * n, "Phi": [[0] * n] * n}
         else:
+            I = 0
+            Q = 0
+            R = 0
+            phase = 0
             if self.live_plot:
                 if self.live_in_python:
                     results = fetching_tool(self.job, ["I", "Q", "iteration"], mode="live")
@@ -138,7 +148,7 @@ class OPXSpectrumScan(OPX):
                     interrupt_on_close(fig, self.job)
                     while results.is_processing():
                         I, Q, iteration = results.fetch_all()
-                        # progress_counter(iteration, self.n_avg(), start_time=results.start_time)
+                        progress_counter(iteration, self.n_avg(), start_time=results.start_time)
 
                         I = I / self.config["pulses"]["readout_pulse"]["length"] * 2**12
                         Q = Q / self.config["pulses"]["readout_pulse"]["length"] * 2**12
