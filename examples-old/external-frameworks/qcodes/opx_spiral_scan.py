@@ -2,7 +2,6 @@ from qcodes.utils.validators import Arrays
 from opx_driver import *
 from qm.qua import *
 from macros import round_to_fixed, measurement_macro, spiral
-import matplotlib.pyplot as plt
 from qualang_tools.plot import interrupt_on_close
 from qualang_tools.results import fetching_tool, progress_counter
 
@@ -11,7 +10,6 @@ class OPXSpiralScan(OPX):
     def __init__(self, config: Dict, name: str = "OPX", host=None, port=None, **kwargs):
         super().__init__(config, name, host=host, port=port, **kwargs)
         self.config = config
-        self.counter = 0
 
         self.add_parameter(
             "wait_time",
@@ -49,7 +47,7 @@ class OPXSpiralScan(OPX):
             set_cmd=None,
         )
         self.add_parameter(
-            "N_points",
+            "n_points",
             unit="",
             vals=Numbers(1, 1e9),
             get_cmd=None,
@@ -62,8 +60,8 @@ class OPXSpiralScan(OPX):
             parameter_class=GeneratedSetPointsSpan,
             spanparam=self.Vx_span,
             centerparam=self.Vx_center,
-            numpointsparam=self.N_points,
-            vals=Arrays(shape=(self.N_points.get_latest,)),
+            numpointsparam=self.n_points,
+            vals=Arrays(shape=(self.n_points.get_latest,)),
         )
 
         self.add_parameter(
@@ -73,41 +71,77 @@ class OPXSpiralScan(OPX):
             parameter_class=GeneratedSetPointsSpan,
             spanparam=self.Vy_span,
             centerparam=self.Vy_center,
-            numpointsparam=self.N_points,
-            vals=Arrays(shape=(self.N_points.get_latest,)),
+            numpointsparam=self.n_points,
+            vals=Arrays(shape=(self.n_points.get_latest,)),
         )
         self.add_parameter(
             "n_avg",
             unit="",
-            vals=Numbers(1, 1e9),
+            vals=Numbers(
+                1,
+            ),
             get_cmd=None,
             set_cmd=None,
         )
         self.add_parameter(
-            "t_meas",
-            unit="s",
-            initial_value=0.01,
-            vals=Numbers(0, 1),
+            "readout_element",
+            unit="",
+            initial_value="resonator",
+            get_cmd=None,
+            set_cmd=None,
+        )
+        self.add_parameter(
+            "x_element",
+            unit="",
+            initial_value="G2",
+            get_cmd=None,
+            set_cmd=None,
+        )
+        self.add_parameter(
+            "y_element",
+            unit="",
+            initial_value="G1",
+            get_cmd=None,
+            set_cmd=None,
+        )
+        self.add_parameter(
+            "gate_operation",
+            unit="",
+            initial_value="jump",
+            get_cmd=None,
+            set_cmd=None,
+        )
+        self.add_parameter(
+            "readout_operation",
+            unit="",
+            initial_value="readout",
             get_cmd=None,
             set_cmd=None,
         )
 
     def get_prog(self):
-        readout_element = "resonator"
-        x_element = "G2"
-        y_element = "G1"
-        self.qm.set_output_dc_offset_by_element(y_element, "single", self.Vy_center())
-        self.qm.set_output_dc_offset_by_element(x_element, "single", self.Vx_center())
-        if self.n_avg() is None:
-            self.n_avg(round(self.t_meas() * 1e9 / self.readout_pulse_length()))
-        dx = round_to_fixed(
-            2 * self.Vx_span() / ((self.N_points() - 1) * self.config["waveforms"]["jump_wf"].get("sample"))
+        # Check that the resolution is odd to form the spiral
+        assert self.n_points() % 2 == 1, "the parameter 'n_points' must be odd {}".format(self.n_points())
+        # Set the dc offset to the center of the spiral (these must be set to the slow voltage source)
+        self.qm.set_output_dc_offset_by_element(self.y_element(), "single", self.Vy_center())
+        self.qm.set_output_dc_offset_by_element(self.x_element(), "single", self.Vx_center())
+        # Get the gate pulse amplitude and derive the voltage step
+        pulse = self.config["elements"][self.x_element()]["operations"][self.gate_operation()]
+        wf = self.config["pulses"][pulse]["waveforms"]["single"]
+        dx = round_to_fixed(self.Vx_span() / ((self.n_points() - 1) * self.config["waveforms"][wf].get("sample")))
+        dy = round_to_fixed(self.Vy_span() / ((self.n_points() - 1) * self.config["waveforms"][wf].get("sample")))
+        print(
+            f"X scan from {(self.Vx_center()-self.Vx_span()/2)*1000:.2f} mV "
+            f"to {(self.Vx_center()+self.Vx_span()/2)*1000:.2f} mV "
+            f"in {self.n_points() - 1} steps "
+            f"of {dx* self.config['waveforms'][wf].get('sample')*1000:.2f} mV."
         )
-        dy = round_to_fixed(
-            2 * self.Vy_span() / ((self.N_points() - 1) * self.config["waveforms"]["jump_wf"].get("sample"))
+        print(
+            f"Y scan from {(self.Vy_center()-self.Vy_span()/2)*1000:.2f} mV "
+            f"to {(self.Vy_center()+self.Vy_span()/2)*1000:.2f} mV "
+            f"in {self.n_points() - 1} steps "
+            f"of {dy* self.config['waveforms'][wf].get('sample')*1000:.2f} mV."
         )
-        print(f"dx = {dx}")
-        print(f"dy = {dy}")
         with program() as prog:
             i = declare(int)  # an index variable for the x index
             j = declare(int)  # an index variable for the y index
@@ -118,8 +152,8 @@ class OPXSpiralScan(OPX):
             Vy_st = declare_stream()
             average = declare(int)  # an index variable for the average
             n_st = declare_stream()
-            moves_per_edge = declare(int)  # the number of moves per edge [1, self.N_points()]
-            completed_moves = declare(int)  # the number of completed move [0, self.N_points() ** 2]
+            moves_per_edge = declare(int)  # the number of moves per edge [1, self.n_points()]
+            completed_moves = declare(int)  # the number of completed move [0, self.n_points() ** 2]
             movement_direction = declare(fixed)  # which direction to move {-1., 1.}
 
             # declaring the measured variables and their streams
@@ -134,53 +168,53 @@ class OPXSpiralScan(OPX):
                 assign(Vx, 0.0)
                 assign(Vy, 0.0)
 
-                ramp_to_zero(x_element, duration=4)
-                ramp_to_zero(y_element, duration=4)
-                align(x_element, y_element, readout_element)
+                ramp_to_zero(self.x_element(), duration=4)
+                ramp_to_zero(self.y_element(), duration=4)
+                align(self.x_element(), self.y_element(), self.readout_element())
                 # for the first pixel it is unnecessary to move before measuring
-                measurement_macro(measured_element=readout_element, I=I, I_stream=I_st, Q=Q, Q_stream=Q_st)
+                measurement_macro(measured_element=self.readout_element(), I=I, I_stream=I_st, Q=Q, Q_stream=Q_st)
                 save(Vx, Vx_st)
                 save(Vy, Vy_st)
 
-                with while_(completed_moves < self.N_points() * (self.N_points() - 1)):
+                with while_(completed_moves < self.n_points() * (self.n_points() - 1)):
                     # for_ loop to move the required number of moves in the x direction
                     with for_(i, 0, i < moves_per_edge, i + 1):
-                        assign(
-                            Vx, Vx + movement_direction * dx * 0.5 * self.config["waveforms"]["jump_wf"].get("sample")
-                        )
+                        assign(Vx, Vx + movement_direction * dx * self.config["waveforms"][wf].get("sample"))
                         # if the x coordinate should be 0, ramp to zero to remove fixed point arithmetic errors accumulating
                         with if_(Vx == 0.0):
-                            ramp_to_zero(x_element, duration=4)
+                            ramp_to_zero(self.x_element(), duration=4)
                         # playing the constant pulse to move to the next pixel
                         with else_():
-                            play("jump" * amp(movement_direction * dx * 0.5), x_element)
+                            play(self.gate_operation() * amp(movement_direction * dx), self.x_element())
 
                         # Make sure that we measure after the pulse has settled
-                        align(x_element, y_element, readout_element)
+                        align(self.x_element(), self.y_element(), self.readout_element())
                         if self.wait_time() >= 4:  # if logic to enable wait_time = 0 without error
-                            wait(self.wait_time(), readout_element)
+                            wait(self.wait_time() // 4, self.readout_element())
                         # Measurement
-                        measurement_macro(measured_element=readout_element, I=I, I_stream=I_st, Q=Q, Q_stream=Q_st)
+                        measurement_macro(
+                            measured_element=self.readout_element(), I=I, I_stream=I_st, Q=Q, Q_stream=Q_st
+                        )
                         save(Vx, Vx_st)
                         save(Vy, Vy_st)
                     # for_ loop to move the required number of moves in the y direction
                     with for_(j, 0, j < moves_per_edge, j + 1):
-                        assign(
-                            Vy, Vy + movement_direction * dy * 0.5 * self.config["waveforms"]["jump_wf"].get("sample")
-                        )
+                        assign(Vy, Vy + movement_direction * dy * self.config["waveforms"][wf].get("sample"))
                         # if the y coordinate should be 0, ramp to zero to remove fixed point arithmetic errors accumulating
                         with if_(Vy == 0.0):
-                            ramp_to_zero(y_element, duration=4)
+                            ramp_to_zero(self.y_element(), duration=4)
                         # playing the constant pulse to move to the next pixel
                         with else_():
-                            play("jump" * amp(movement_direction * dy * 0.5), y_element)
+                            play(self.gate_operation() * amp(movement_direction * dy), self.y_element())
 
                         # Make sure that we measure after the pulse has settled
-                        align(x_element, y_element, readout_element)
+                        align(self.x_element(), self.y_element(), self.readout_element())
                         if self.wait_time() >= 4:  # if logic to enable wait_time = 0 without error
-                            wait(self.wait_time(), readout_element)
+                            wait(self.wait_time() // 4, self.readout_element())
                         # Measurement
-                        measurement_macro(measured_element=readout_element, I=I, I_stream=I_st, Q=Q, Q_stream=Q_st)
+                        measurement_macro(
+                            measured_element=self.readout_element(), I=I, I_stream=I_st, Q=Q, Q_stream=Q_st
+                        )
                         save(Vx, Vx_st)
                         save(Vy, Vy_st)
                     # updating the variables
@@ -192,51 +226,48 @@ class OPXSpiralScan(OPX):
 
                 # filling in the final x row, which was not covered by the previous for_ loop
                 with for_(i, 0, i < moves_per_edge - 1, i + 1):
-                    assign(Vx, Vx + movement_direction * dx * 0.5 * self.config["waveforms"]["jump_wf"].get("sample"))
+                    assign(Vx, Vx + movement_direction * dx * self.config["waveforms"][wf].get("sample"))
 
                     # if the x coordinate should be 0, ramp to zero to remove fixed point arithmetic errors accumulating
                     with if_(Vx == 0.0):
-                        ramp_to_zero(x_element, duration=4)
+                        ramp_to_zero(self.x_element(), duration=4)
                     # playing the constant pulse to move to the next pixel
                     with else_():
-                        play("jump" * amp(movement_direction * dx * 0.5), x_element)
+                        play(self.gate_operation() * amp(movement_direction * dx), self.x_element())
 
                     # Make sure that we measure after the pulse has settled
-                    align(x_element, y_element, readout_element)
+                    align(self.x_element(), self.y_element(), self.readout_element())
                     if self.wait_time() >= 4:
-                        wait(self.wait_time(), readout_element)
+                        wait(self.wait_time() // 4, self.readout_element())
                     # Measurement
-                    measurement_macro(measured_element=readout_element, I=I, I_stream=I_st, Q=Q, Q_stream=Q_st)
+                    measurement_macro(measured_element=self.readout_element(), I=I, I_stream=I_st, Q=Q, Q_stream=Q_st)
                     save(Vx, Vx_st)
                     save(Vy, Vy_st)
                 # aligning and ramping to zero to return to initial state
-                align(x_element, y_element, readout_element)
-                ramp_to_zero(x_element, duration=4)
-                ramp_to_zero(y_element, duration=4)
+                align(self.x_element(), self.y_element(), self.readout_element())
+                ramp_to_zero(self.x_element(), duration=4)
+                ramp_to_zero(self.y_element(), duration=4)
                 save(average, n_st)
 
             with stream_processing():
-                I_st.buffer(self.N_points() * self.N_points()).average().save("I")
-                Q_st.buffer(self.N_points() * self.N_points()).average().save("Q")
+                I_st.buffer(self.n_points() * self.n_points()).average().save("I")
+                Q_st.buffer(self.n_points() * self.n_points()).average().save("Q")
                 n_st.save("iteration")
         return prog
 
     def run_exp(self):
         self.execute_prog(self.get_prog())
-        self.counter = 0
 
-    def simulate_exp(self, duration):
-        self.simulate_prog(self.get_prog(), duration=duration)
-        self.counter = 0
-
-    def resume(self):
-        self.qm.resume()
-        self.counter += 1
+    def simulate_exp(self, get_results=False):
+        if get_results:
+            self.simulate_and_read(self.get_prog())
+        else:
+            self.simulate_prog(self.get_prog())
 
     def get_res(self):
 
         if self.result_handles is None:
-            n = self.N_points()
+            n = self.n_points()
             return {
                 "I": [[0] * n] * n,
                 "Q": [[0] * n] * n,
@@ -246,9 +277,11 @@ class OPXSpiralScan(OPX):
                 "Vy": [[0] * n] * n,
             }
         else:
-            order = spiral(self.N_points())
+            I = 0; Q = 0; R = 0; phase = 0
+            order = spiral(self.n_points()).T
             if self.live_plot:
                 if self.live_in_python:
+                    # Live plot the results using matplotlib
                     results = fetching_tool(self.job, ["I", "Q", "iteration"], mode="live")
                     fig = plt.figure()
                     interrupt_on_close(fig, self.job)
@@ -292,6 +325,7 @@ class OPXSpiralScan(OPX):
                         plt.pause(0.1)
 
                 else:
+                    # Live plot the results using plottr
                     self.result_handles.get("I").wait_for_values(1)
                     self.result_handles.get("Q").wait_for_values(1)
                     self.result_handles.get("iteration").wait_for_values(1)
@@ -312,6 +346,7 @@ class OPXSpiralScan(OPX):
                     progress_counter(iteration, self.n_avg())
 
             else:
+                # Fetch all results at the end of the program
                 self.result_handles.wait_for_all_values()
                 I = (
                     self.result_handles.get("I").fetch_all()
