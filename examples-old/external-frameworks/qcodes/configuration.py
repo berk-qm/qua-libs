@@ -4,7 +4,8 @@ from scipy.signal.windows import gaussian
 ################
 # CONFIGURATION:
 ################
-
+qop_ip = "172.16.2.103"
+qop_port = 85
 qubit_IF = 50.123e6
 reflectometry_IF = 300e6
 
@@ -12,7 +13,7 @@ lockin_freq = 80  # Hz
 # readout_pulse_length = round(1 / lockin_freq * 1e9)  # ns
 readout_repeats = 20  # To speed up compilation
 readout_pulse_length = round(1 / lockin_freq * 1e9 / readout_repeats)  # ns
-readout_pulse_length = 16
+readout_pulse_length = 160
 cw_readout_pulse_length = int(100e3)
 
 cw_amp = 0.3

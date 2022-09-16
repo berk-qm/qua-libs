@@ -1,6 +1,7 @@
 from qcodes.utils.validators import Arrays
 from opx_driver import *
 from qm.qua import *
+from qualang_tools.loops import from_array
 
 
 # noinspection PyAbstractClass
@@ -26,7 +27,35 @@ class OPXSpectrumScan(OPX):
             set_cmd=None,
         )
         self.add_parameter(
-            "n_points",
+            "n_f",
+            initial_value=100,
+            unit="",
+            vals=Numbers(
+                1,
+            ),
+            get_cmd=None,
+            set_cmd=None,
+        )
+        self.add_parameter(
+            "a_start",
+            initial_value=0,
+            unit="",
+            label="f start",
+            vals=Numbers(-2, 2-2**-28),
+            get_cmd=None,
+            set_cmd=None,
+        )
+        self.add_parameter(
+            "a_stop",
+            initial_value=1,
+            unit="",
+            label="f stop",
+            vals=Numbers(-2, 2-2**-28),
+            get_cmd=None,
+            set_cmd=None,
+        )
+        self.add_parameter(
+            "n_a",
             initial_value=100,
             unit="",
             vals=Numbers(
@@ -52,8 +81,18 @@ class OPXSpectrumScan(OPX):
             parameter_class=GeneratedSetPoints,
             startparam=self.f_start,
             stopparam=self.f_stop,
-            numpointsparam=self.n_points,
-            vals=Arrays(shape=(self.n_points.get_latest,)),
+            numpointsparam=self.n_f,
+            vals=Arrays(shape=(self.n_f.get_latest,)),
+        )
+        self.add_parameter(
+            "amp_axis",
+            unit="",
+            label="Amp Axis",
+            parameter_class=GeneratedSetPoints,
+            startparam=self.a_start,
+            stopparam=self.a_stop,
+            numpointsparam=self.n_a,
+            vals=Arrays(shape=(self.n_a.get_latest,)),
         )
         self.add_parameter(
             "amp",
@@ -86,8 +125,9 @@ class OPXSpectrumScan(OPX):
         )
 
     def get_prog(self):
-        df = round((self.f_stop() - self.f_start()) / self.n_points())
-        with program() as prog:
+        d_f = round((self.f_stop() - self.f_start()) / self.n_f())
+        d_a = ((self.a_stop() - self.a_start()) / self.n_a())
+        with program() as prog_1D:
             n = declare(int)
             f = declare(int)
             I = declare(fixed)
@@ -96,7 +136,7 @@ class OPXSpectrumScan(OPX):
             I_st = declare_stream()
             Q_st = declare_stream()
             with for_(n, 0, n < self.n_avg(), n + 1):
-                with for_(f, self.f_start(), f < self.f_stop(), f + df):
+                with for_(f, self.f_start(), f < self.f_stop(), f + d_f):
                     update_frequency(self.readout_element(), f)
                     measure(
                         self.readout_operation() * amp(self.amp()),
@@ -109,33 +149,62 @@ class OPXSpectrumScan(OPX):
                     save(Q, Q_st)
                 save(n, n_st)
             with stream_processing():
-                I_st.buffer(self.n_points()).average().save("I")
-                Q_st.buffer(self.n_points()).average().save("Q")
+                I_st.buffer(len(self.freq_axis())).average().save("I")
+                Q_st.buffer(len(self.freq_axis())).average().save("Q")
                 n_st.save("iteration")
 
-        return prog
+        with program() as prog_2D:
+            n = declare(int)
+            f = declare(int)
+            a = declare(fixed)
+            I = declare(fixed)
+            Q = declare(fixed)
+            n_st = declare_stream()
+            I_st = declare_stream()
+            Q_st = declare_stream()
+            with for_(n, 0, n < self.n_avg(), n + 1):
+                with for_(f, self.f_start(), f < self.f_stop(), f + d_f):
+                    update_frequency(self.readout_element(), f)
+                    with for_(a, self.a_start(), a < self.a_stop(), a + d_a):
+                        measure(
+                            self.readout_operation() * amp(a),
+                            self.readout_element(),
+                            None,
+                            demod.full("cos", I, "out1"),
+                            demod.full("sin", Q, "out1"),
+                        )
+                        save(I, I_st)
+                        save(Q, Q_st)
+                save(n, n_st)
+            with stream_processing():
+                I_st.buffer(len(self.amp_axis())).buffer(len(self.freq_axis())).average().save("I")
+                Q_st.buffer(len(self.amp_axis())).buffer(len(self.freq_axis())).average().save("Q")
+                n_st.save("iteration")
+
+        return prog_2D
 
     def run_exp(self):
         self.execute_prog(self.get_prog())
 
-    # def get_res(self):
-    #     if self.result_handles is None:
-    #         n = self.n_points()
-    #         return {"I": (0,) * n, "Q": (0,) * n, "R": (0,) * n, "Phi": (0,) * n}
-    #     else:
-    #         print("get res")
-    #         self.result_handles.wait_for_all_values()
-    #         I = self.result_handles.get("I").fetch_all() / self.readout_pulse_length() * 2**12 * 2
-    #         Q = self.result_handles.get("Q").fetch_all() / self.readout_pulse_length() * 2**12 * 2
-    #         R = np.sqrt(I**2 + Q**2)
-    #         phase = np.unwrap(np.angle(I + 1j * Q)) * 180 / np.pi
-    #         return {"I": I, "Q": Q, "R": R, "Phi": phase}
-
     def get_res(self):
+        n_f = self.n_f()
+        n_a = self.n_a()
+        plot_2d = False
+        if n_f > 1 and n_a > 1:
+            y = self.freq_axis()
+            x = self.amp_axis()
+            plot_2d = True
+        elif n_f > 1:
+            x = self.freq_axis()
+            y = None
+        elif n_a > 1:
+            x = self.amp_axis()
+            y = None
+        else:
+            raise ValueError("At least one parameter must be scanned.")
 
         if self.result_handles is None:
-            n = self.n_points()
-            return {"I": [[0] * n] * n, "Q": [[0] * n] * n, "R": [[0] * n] * n, "Phi": [[0] * n] * n}
+            return {"I": [[0] * n_f] * n_a, "Q": [[0] * n_f] * n_a, "R": [[0] * n_f] * n_a, "Phi":[[0] * n_f] * n_a}
         else:
             I = 0
             Q = 0
@@ -154,28 +223,56 @@ class OPXSpectrumScan(OPX):
                         Q = Q / self.config["pulses"]["readout_pulse"]["length"] * 2**12
                         R = np.sqrt(I**2 + Q**2)
                         phase = np.unwrap(np.angle(I + 1j * Q)) * 180 / np.pi
-                        plt.subplot(221)
-                        plt.cla()
-                        plt.title("I [V]")
-                        plt.plot(self.freq_axis(), I)
-                        plt.xlabel("Frequency [Hz]")
-                        plt.subplot(222)
-                        plt.cla()
-                        plt.title("Q [V]")
-                        plt.plot(self.freq_axis(), Q)
-                        plt.xlabel("Frequency [Hz]")
-                        plt.subplot(223)
-                        plt.cla()
-                        plt.title("R [V]")
-                        plt.plot(self.freq_axis(), R)
-                        plt.xlabel("Frequency [Hz]")
-                        plt.subplot(224)
-                        plt.cla()
-                        plt.title("phase [deg]")
-                        plt.plot(self.freq_axis(), phase)
-                        plt.xlabel("Frequency [Hz]")
-                        plt.tight_layout()
-                        plt.pause(0.1)
+                        if plot_2d:
+                            plt.subplot(221)
+                            plt.cla()
+                            plt.title("I [V]")
+                            plt.pcolor(x, y, I)
+                            plt.xlabel("Frequency [Hz]")
+                            plt.ylabel("Amplitude pre-factor")
+                            plt.subplot(222)
+                            plt.cla()
+                            plt.title("Q [V]")
+                            plt.pcolor(x, y, Q)
+                            plt.xlabel("Frequency [Hz]")
+                            plt.ylabel("Amplitude pre-factor")
+                            plt.subplot(223)
+                            plt.cla()
+                            plt.title("R [V]")
+                            plt.pcolor(x, y, R)
+                            plt.xlabel("Frequency [Hz]")
+                            plt.ylabel("Amplitude pre-factor")
+                            plt.subplot(224)
+                            plt.cla()
+                            plt.title("phase [deg]")
+                            plt.pcolor(x, y, phase)
+                            plt.xlabel("Frequency [Hz]")
+                            plt.ylabel("Amplitude pre-factor")
+                            plt.tight_layout()
+                            plt.pause(0.1)
+                        else:
+                            plt.subplot(221)
+                            plt.cla()
+                            plt.title("I [V]")
+                            plt.plot(self.freq_axis(), I)
+                            plt.xlabel("Frequency [Hz]")
+                            plt.subplot(222)
+                            plt.cla()
+                            plt.title("Q [V]")
+                            plt.plot(self.freq_axis(), Q)
+                            plt.xlabel("Frequency [Hz]")
+                            plt.subplot(223)
+                            plt.cla()
+                            plt.title("R [V]")
+                            plt.plot(self.freq_axis(), R)
+                            plt.xlabel("Frequency [Hz]")
+                            plt.subplot(224)
+                            plt.cla()
+                            plt.title("phase [deg]")
+                            plt.plot(self.freq_axis(), phase)
+                            plt.xlabel("Frequency [Hz]")
+                            plt.tight_layout()
+                            plt.pause(0.1)
 
                 else:
                     self.result_handles.get("I").wait_for_values(1)

@@ -34,7 +34,10 @@ opx_freq_scan.readout_element("resonator")  # readout_element
 opx_freq_scan.readout_operation("readout")  # gate_operation
 opx_freq_scan.f_start(200.85e6)
 opx_freq_scan.f_stop(309.88e6)
-opx_freq_scan.n_points(500)
+opx_freq_scan.n_f(50)
+opx_freq_scan.a_start(-1)
+opx_freq_scan.a_stop(1)
+opx_freq_scan.n_a(10)
 opx_freq_scan.n_avg(100000)
 opx_freq_scan.amp(1.0)
 opx_freq_scan.readout_pulse_length(readout_pulse_length)
@@ -50,8 +53,8 @@ full_data = QMDemodParameters(
     names=["I", "Q", "R", "Phi"],
     units=["V", "V", "V", "°"],
     # The following two lines tell it that it will return a vector of items!
-    shapes=((opx_freq_scan.n_points(),),) * 4,
-    setpoints=((opx_freq_scan.freq_axis(),),) * 4,
+    shapes=((opx_freq_scan.n_a(), opx_freq_scan.n_f(),),) * 4,
+    setpoints=((opx_freq_scan.freq_axis(), opx_freq_scan.amp_axis(),),) * 4,
 )
 
 station = qc.Station()
