@@ -1,13 +1,32 @@
 from qcodes.utils.validators import Arrays
 from opx_driver import *
 from qm.qua import *
-from qualang_tools.loops import from_array
+
+
+class OPXSpectrumParameters(QMDemodParameters):
+    def __init__(self, instr, params, name, names, units, shapes=None, setpoints=None, *args, **kwargs):
+        if shapes is None:
+            if instr.n_f() > 1 and instr.n_a() > 1:
+                shapes = ((instr.n_f(), instr.n_a(),),) * len(params)
+            elif instr.n_f() > 1:
+                shapes = ((instr.n_f(),),) * len(params)
+            elif instr.n_a() > 1:
+                raise Exception("Scanning the amplitude only is not yet implemented.")
+        if setpoints is None:
+            if instr.n_f() > 1 and instr.n_a() > 1:
+                setpoints = ((instr.freq_axis(), instr.amp_axis()),) * len(params)
+            elif instr.n_f() > 1:
+                setpoints = ((instr.freq_axis(),),) * len(params)
+            elif instr.n_a() > 1:
+                raise Exception("Scanning the amplitude only is not yet implemented.")
+        super().__init__(instr=instr, params=params,name=name, names=names, units=units, shapes=shapes, setpoints=setpoints, *args, **kwargs)
 
 
 # noinspection PyAbstractClass
 class OPXSpectrumScan(OPX):
     def __init__(self, config: Dict, name: str = "OPX", host=None, port=None, **kwargs):
         super().__init__(config, name, host=host, port=port, **kwargs)
+        self.plot_2d = False
         self.add_parameter(
             "f_start",
             initial_value=30e6,
@@ -125,8 +144,14 @@ class OPXSpectrumScan(OPX):
         )
 
     def get_prog(self):
+        # Check the scanned dimensions
+        if self.n_f() > 1 and self.n_a() > 1:
+            self.plot_2d = True
+        # Frequency increment
         d_f = round((self.f_stop() - self.f_start()) / self.n_f())
+        # Amplitude increment
         d_a = ((self.a_stop() - self.a_start()) / self.n_a())
+        # 1D program (frequency scan)
         with program() as prog_1D:
             n = declare(int)
             f = declare(int)
@@ -149,10 +174,10 @@ class OPXSpectrumScan(OPX):
                     save(Q, Q_st)
                 save(n, n_st)
             with stream_processing():
-                I_st.buffer(len(self.freq_axis())).average().save("I")
-                Q_st.buffer(len(self.freq_axis())).average().save("Q")
+                I_st.buffer(self.n_f()).average().save("I")
+                Q_st.buffer(self.n_f()).average().save("Q")
                 n_st.save("iteration")
-
+        # 2D program (frequency & amplitude scan)
         with program() as prog_2D:
             n = declare(int)
             f = declare(int)
@@ -177,11 +202,14 @@ class OPXSpectrumScan(OPX):
                         save(Q, Q_st)
                 save(n, n_st)
             with stream_processing():
-                I_st.buffer(len(self.amp_axis())).buffer(len(self.freq_axis())).average().save("I")
-                Q_st.buffer(len(self.amp_axis())).buffer(len(self.freq_axis())).average().save("Q")
+                I_st.buffer(self.n_a()).buffer(self.n_f()).average().save("I")
+                Q_st.buffer(self.n_a()).buffer(self.n_f()).average().save("Q")
                 n_st.save("iteration")
-
-        return prog_2D
+        # Returns the desired program
+        if self.plot_2d:
+            return prog_2D
+        else:
+            return prog_1D
 
     def run_exp(self):
         self.execute_prog(self.get_prog())
@@ -189,11 +217,9 @@ class OPXSpectrumScan(OPX):
     def get_res(self):
         n_f = self.n_f()
         n_a = self.n_a()
-        plot_2d = False
-        if n_f > 1 and n_a > 1:
-            y = self.freq_axis()
-            x = self.amp_axis()
-            plot_2d = True
+        if self.plot_2d:
+            x = self.freq_axis()
+            y = self.amp_axis()
         elif n_f > 1:
             x = self.freq_axis()
             y = None
@@ -212,7 +238,9 @@ class OPXSpectrumScan(OPX):
             phase = 0
             if self.live_plot:
                 if self.live_in_python:
+                    print("start")
                     results = fetching_tool(self.job, ["I", "Q", "iteration"], mode="live")
+                    print("fig")
                     fig = plt.figure()
                     interrupt_on_close(fig, self.job)
                     while results.is_processing():
@@ -223,29 +251,29 @@ class OPXSpectrumScan(OPX):
                         Q = Q / self.config["pulses"]["readout_pulse"]["length"] * 2**12
                         R = np.sqrt(I**2 + Q**2)
                         phase = np.unwrap(np.angle(I + 1j * Q)) * 180 / np.pi
-                        if plot_2d:
+                        if self.plot_2d:
                             plt.subplot(221)
                             plt.cla()
                             plt.title("I [V]")
-                            plt.pcolor(x, y, I)
+                            plt.pcolor(x, y, I.T)
                             plt.xlabel("Frequency [Hz]")
                             plt.ylabel("Amplitude pre-factor")
                             plt.subplot(222)
                             plt.cla()
                             plt.title("Q [V]")
-                            plt.pcolor(x, y, Q)
+                            plt.pcolor(x, y, Q.T)
                             plt.xlabel("Frequency [Hz]")
                             plt.ylabel("Amplitude pre-factor")
                             plt.subplot(223)
                             plt.cla()
                             plt.title("R [V]")
-                            plt.pcolor(x, y, R)
+                            plt.pcolor(x, y, R.T)
                             plt.xlabel("Frequency [Hz]")
                             plt.ylabel("Amplitude pre-factor")
                             plt.subplot(224)
                             plt.cla()
                             plt.title("phase [deg]")
-                            plt.pcolor(x, y, phase)
+                            plt.pcolor(x, y, phase.T)
                             plt.xlabel("Frequency [Hz]")
                             plt.ylabel("Amplitude pre-factor")
                             plt.tight_layout()
