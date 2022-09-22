@@ -4,8 +4,8 @@ from scipy.signal.windows import gaussian
 ################
 # CONFIGURATION:
 ################
-qop_ip = "172.16.2.103"
-qop_port = 85
+qop_ip = "127.0.0.1"
+qop_port = 80
 qubit_IF = 50.123e6
 reflectometry_IF = 300e6
 
