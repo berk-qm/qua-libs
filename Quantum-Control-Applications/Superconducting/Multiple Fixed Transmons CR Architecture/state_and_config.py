@@ -33,6 +33,10 @@ def IQ_imbalance(g, phi):
 
 # layer 1: bare state
 quam = {
+    "network":{
+        "ip":"172.16.2.103",
+        "port":85
+    },
     "analog_outputs": [
         {
             "controller": "con1",
@@ -109,6 +113,7 @@ quam = {
             "readout_amplitude": 0.2,
             "opt_readout_frequency": 4.52503e9,
             "rotation_angle": 41.3,  # degrees
+            "ge_threshold": 0.07957,
             "readout_fidelity": 0.84,
             "chi": 1e6,
             "wiring": {
@@ -124,6 +129,7 @@ quam = {
             "readout_amplitude": 0.2,
             "opt_readout_frequency": 4.52503e9,
             "rotation_angle": 41.3,  # degrees
+            "ge_threshold": -0.0799,
             "readout_fidelity": 0.84,
             "chi": 1e6,
             "wiring": {
