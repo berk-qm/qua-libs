@@ -492,14 +492,13 @@ class qubit_frequency_tracking:
                 play("x90", self.qubit)
                 wait(self.dephasing_time, self.qubit)
                 if self.frame_rotation:
-                    if self.frame_rotation:
-                        assign(
-                            self.frame_rotation_detuning,
-                            Cast.mul_fixed_by_int(self.Hz_to_GHz, self.f - self.f_res_corr),
-                        )
-                        frame_rotation_2pi(
-                            Cast.mul_fixed_by_int(self.frame_rotation_detuning, 4 * self.dephasing_time), self.qubit
-                        )
+                    assign(
+                        self.frame_rotation_detuning,
+                        Cast.mul_fixed_by_int(self.Hz_to_GHz, self.f - self.f_res_corr),
+                    )
+                    frame_rotation_2pi(
+                        Cast.mul_fixed_by_int(self.frame_rotation_detuning, 4 * self.dephasing_time), self.qubit
+                    )
                 play("x90", self.qubit)
 
                 align(self.qubit, self.rr)
