@@ -7,7 +7,12 @@ class OPXSpectrumParameters(QMDemodParameters):
     def __init__(self, instr, params, name, names, units, shapes=None, setpoints=None, *args, **kwargs):
         if shapes is None:
             if instr.n_f() > 1 and instr.n_a() > 1:
-                shapes = ((instr.n_f(), instr.n_a(),),) * len(params)
+                shapes = (
+                    (
+                        instr.n_f(),
+                        instr.n_a(),
+                    ),
+                ) * len(params)
             elif instr.n_f() > 1:
                 shapes = ((instr.n_f(),),) * len(params)
             elif instr.n_a() > 1:
@@ -19,7 +24,17 @@ class OPXSpectrumParameters(QMDemodParameters):
                 setpoints = ((instr.freq_axis(),),) * len(params)
             elif instr.n_a() > 1:
                 raise Exception("Scanning the amplitude only is not yet implemented.")
-        super().__init__(instr=instr, params=params,name=name, names=names, units=units, shapes=shapes, setpoints=setpoints, *args, **kwargs)
+        super().__init__(
+            instr=instr,
+            params=params,
+            name=name,
+            names=names,
+            units=units,
+            shapes=shapes,
+            setpoints=setpoints,
+            *args,
+            **kwargs,
+        )
 
 
 # noinspection PyAbstractClass
@@ -27,6 +42,15 @@ class OPXSpectrumScan(OPX):
     def __init__(self, config: Dict, name: str = "OPX", host=None, port=None, **kwargs):
         super().__init__(config, name, host=host, port=port, **kwargs)
         self.plot_2d = False
+        self.add_parameter(
+            "cooldown_time",
+            initial_value=1000,
+            unit="ns",
+            label="cooldown time",
+            vals=Numbers(16, 60e6),
+            get_cmd=None,
+            set_cmd=None,
+        )
         self.add_parameter(
             "f_start",
             initial_value=30e6,
@@ -60,7 +84,7 @@ class OPXSpectrumScan(OPX):
             initial_value=0,
             unit="",
             label="f start",
-            vals=Numbers(-2, 2-2**-28),
+            vals=Numbers(-2, 2 - 2**-28),
             get_cmd=None,
             set_cmd=None,
         )
@@ -69,7 +93,7 @@ class OPXSpectrumScan(OPX):
             initial_value=1,
             unit="",
             label="f stop",
-            vals=Numbers(-2, 2-2**-28),
+            vals=Numbers(-2, 2 - 2**-28),
             get_cmd=None,
             set_cmd=None,
         )
@@ -150,7 +174,7 @@ class OPXSpectrumScan(OPX):
         # Frequency increment
         d_f = round((self.f_stop() - self.f_start()) / self.n_f())
         # Amplitude increment
-        d_a = ((self.a_stop() - self.a_start()) / self.n_a())
+        d_a = (self.a_stop() - self.a_start()) / self.n_a()
         # 1D program (frequency scan)
         with program() as prog_1D:
             n = declare(int)
@@ -170,6 +194,7 @@ class OPXSpectrumScan(OPX):
                         demod.full("cos", I, "out1"),
                         demod.full("sin", Q, "out1"),
                     )
+                    wait(int(self.cooldown_time()) // 4, self.readout_element())
                     save(I, I_st)
                     save(Q, Q_st)
                 save(n, n_st)
@@ -198,6 +223,7 @@ class OPXSpectrumScan(OPX):
                             demod.full("cos", I, "out1"),
                             demod.full("sin", Q, "out1"),
                         )
+                        wait(int(self.cooldown_time()) // 4, self.readout_element())
                         save(I, I_st)
                         save(Q, Q_st)
                 save(n, n_st)
@@ -230,7 +256,7 @@ class OPXSpectrumScan(OPX):
             raise ValueError("At least one parameter must be scanned.")
 
         if self.result_handles is None:
-            return {"I": [[0] * n_f] * n_a, "Q": [[0] * n_f] * n_a, "R": [[0] * n_f] * n_a, "Phi":[[0] * n_f] * n_a}
+            return {"I": [[0] * n_f] * n_a, "Q": [[0] * n_f] * n_a, "R": [[0] * n_f] * n_a, "Phi": [[0] * n_f] * n_a}
         else:
             I = 0
             Q = 0

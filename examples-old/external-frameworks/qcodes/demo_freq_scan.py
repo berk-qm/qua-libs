@@ -32,13 +32,14 @@ experiment = load_or_create_experiment(experiment_name=exp_name, sample_name=sam
 opx_freq_scan = OPXSpectrumScan(config, host=qop_ip, port=qop_port)
 opx_freq_scan.readout_element("resonator")  # readout_element
 opx_freq_scan.readout_operation("readout")  # gate_operation
+opx_freq_scan.cooldown_time(1e3)
 opx_freq_scan.f_start(200.85e6)
 opx_freq_scan.f_stop(309.88e6)
-opx_freq_scan.n_f(21)
+opx_freq_scan.n_f(51)
 opx_freq_scan.a_start(-1)
 opx_freq_scan.a_stop(1)
-opx_freq_scan.n_a(51)
-opx_freq_scan.n_avg(100000)
+opx_freq_scan.n_a(31)
+opx_freq_scan.n_avg(10000)
 opx_freq_scan.amp(1.0)
 opx_freq_scan.readout_pulse_length(readout_pulse_length)
 
@@ -53,8 +54,8 @@ full_data = OPXSpectrumParameters(
     names=["I", "Q", "R", "Phi"],
     units=["V", "V", "V", "°"],
     # The following two lines tell it that it will return a vector of items!
-    #shapes=((opx_freq_scan.n_f(), opx_freq_scan.n_a(),),) * 4,
-    #setpoints=((opx_freq_scan.freq_axis(), (opx_freq_scan.amp_axis() if opx_freq_scan.n_a()>1 else None)),) * 4,
+    # shapes=((opx_freq_scan.n_f(), opx_freq_scan.n_a(),),) * 4,
+    # setpoints=((opx_freq_scan.freq_axis(), (opx_freq_scan.amp_axis() if opx_freq_scan.n_a()>1 else None)),) * 4,
 )
 
 station = qc.Station()
