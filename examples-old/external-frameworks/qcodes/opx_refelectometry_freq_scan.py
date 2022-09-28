@@ -138,7 +138,7 @@ class OPXSpectrumScan(OPX):
             vals=Arrays(shape=(self.n_a.get_latest,)),
         )
         self.add_parameter(
-            "amp",
+            "readout_amp",
             unit="",
             initial_value=1,
             vals=Numbers(-2, 2 - 2**-28),
@@ -188,7 +188,7 @@ class OPXSpectrumScan(OPX):
                 with for_(f, self.f_start(), f < self.f_stop(), f + d_f):
                     update_frequency(self.readout_element(), f)
                     measure(
-                        self.readout_operation() * amp(self.amp()),
+                        self.readout_operation() * amp(self.readout_amp()),
                         self.readout_element(),
                         None,
                         demod.full("cos", I, "out1"),

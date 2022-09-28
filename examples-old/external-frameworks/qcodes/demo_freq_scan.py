@@ -40,7 +40,7 @@ opx_freq_scan.a_start(-1)
 opx_freq_scan.a_stop(1)
 opx_freq_scan.n_a(31)
 opx_freq_scan.n_avg(10000)
-opx_freq_scan.amp(1.0)
+opx_freq_scan.readout_amp(1.0)  # Readout amplitude used for 1D scan
 opx_freq_scan.readout_pulse_length(readout_pulse_length)
 
 ## Change something in the config
