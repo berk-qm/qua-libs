@@ -6,6 +6,7 @@ from typing import Tuple, List, Dict
 import time
 import random
 import matplotlib
+
 matplotlib.use('TkAgg')
 
 import matplotlib.pyplot as pplot
@@ -36,8 +37,8 @@ class Utils:
 
     @staticmethod
     def qua_add_binary_search_block(val_to_search, target_list, target_list_size: int, result_ind):
-        ind = declare(int, value=(target_list_size-1)//2)
-        right = declare(int, value=target_list_size-1)
+        ind = declare(int, value=(target_list_size - 1) // 2)
+        right = declare(int, value=target_list_size - 1)
         left = declare(int, value=0)
 
         with while_(left <= right):
@@ -47,8 +48,8 @@ class Utils:
                 assign(left, ind + 1)
             with else_():
                 assign(result_ind, ind)
-                assign(right, left-1)
-            assign(ind,(right + left) >> 1)
+                assign(right, left - 1)
+            assign(ind, (right + left) >> 1)
 
     @staticmethod
     def phXZ_to_tuple(phXZ_gate):
@@ -71,18 +72,19 @@ class Paulis:
     pauli_Z = cirq.PhasedXZGate(x_exponent=0, z_exponent=1, axis_phase_exponent=0)
     pauli_Y = cirq.PhasedXZGate(x_exponent=1, z_exponent=0, axis_phase_exponent=0.5)
 
-    I = np.array([0,0])
-    X = np.array([1,0])
-    Z = np.array([0,1])
-    Y = np.array([1,1])
+    I = np.array([0, 0])
+    X = np.array([1, 0])
+    Z = np.array([0, 1])
+    Y = np.array([1, 1])
 
     def __init__(self, num_qubits):
-        assert (num_qubits in [1,2])
+        assert (num_qubits in [1, 2])
         self.paulis_alpha_vecs_reduced = [self.I, self.X, self.Z, self.Y]
         if num_qubits == 1:
             q = cirq.LineQubit(0)
-            self.paulis_circuits = [cirq.Circuit(op(q)) for op in [self.pauli_I, self.pauli_X, self.pauli_Z, self.pauli_Y]]
-            self.paulis_alpha_vecs = [np.hstack(([0,0], v)) for v in self.paulis_alpha_vecs_reduced]
+            self.paulis_circuits = [cirq.Circuit(op(q)) for op in
+                                    [self.pauli_I, self.pauli_X, self.pauli_Z, self.pauli_Y]]
+            self.paulis_alpha_vecs = [np.hstack(([0, 0], v)) for v in self.paulis_alpha_vecs_reduced]
         else:
             q1, q2 = cirq.LineQubit.range(2)
             self.paulis_circuits = []
@@ -95,7 +97,6 @@ class Paulis:
 
 
 class SingleQubitSymplacticCompilationData:
-
     _symplectic_matrices_reduced = []
     _symplectic_matrices = []
 
@@ -127,11 +128,11 @@ class SingleQubitSymplacticCompilationData:
         return
 
     def generate_symplectic_matrices_R22(self):
-        skew = np.array([[0,1], [1, 0]])
-        all_matrix_space = [np.array(a) for a in product([ar for ar in product([0,1], repeat=2)], repeat=2)]
+        skew = np.array([[0, 1], [1, 0]])
+        all_matrix_space = [np.array(a) for a in product([ar for ar in product([0, 1], repeat=2)], repeat=2)]
         for mat in all_matrix_space:
             if np.array_equal((mat.T @ skew @ mat) % 2, skew):
-                embedded_mat = np.zeros((4,4))
+                embedded_mat = np.zeros((4, 4))
                 embedded_mat[:2, : 2] = mat
                 SingleQubitSymplacticCompilationData._symplectic_matrices.append(embedded_mat)
         return
@@ -144,10 +145,7 @@ class SingleQubitSymplacticCompilationData:
         return result_container
 
 
-
-
 class RandomizedBenchmarkProgramBuilder:
-
     class QuaHelpers:
         def __init__(self):
             self.beta_lut = declare(int, value=[0, 0, 0, 0, 0, 0, 3, 1, 0, 1, 0, 3, 0, 3, 1, 0])
@@ -188,10 +186,16 @@ class RandomizedBenchmarkProgramBuilder:
 
     _NUM_CLIFFORDS = _CLASS_CNOT_SIZE + _CLASS_C1_SIZE + _CLASS_ISWAP_SIZE + _CLASS_SWAP_SIZE
 
-    def __init__(self, config_builder: conf_3.ConfigBuilder, num_experiments, num_qubits, bake_cnot=True, bake_swap=True,
+    def __init__(self, config_builder: conf_3.ConfigBuilder, num_experiments, num_qubits, bake_cnot=True,
+                 bake_swap=True,
                  min_sequence_length=1, max_sequence_length=None, from_initilized_list=False):
+        """
+        num_experiments : how many times we want to repeat the process
+        num_qubits: hard coded to 2 (was supposed to support 1 initially)
+
+        """
         self.num_qubits = num_qubits
-        assert num_qubits in [1,2], "Only supports 1 or 2 qubits. "
+        assert num_qubits in [1, 2], "Only supports 1 or 2 qubits. "
         if num_qubits == 1:
             self._NUM_PAULIS = 4
             self._NUM_CLIFFORDS = 6
@@ -200,7 +204,8 @@ class RandomizedBenchmarkProgramBuilder:
         self.bake_swap = bake_swap
         self.num_experiments = num_experiments
         self.min_seq_length = min_sequence_length
-        self.max_sequence_length = self._NUM_CLIFFORDS if max_sequence_length is None else min(max_sequence_length, self._NUM_CLIFFORDS)
+        self.max_sequence_length = self._NUM_CLIFFORDS if max_sequence_length is None else min(max_sequence_length,
+                                                                                               self._NUM_CLIFFORDS)
         self.symplectic_compilation_data = self.get_cliffords_data()
         self.paulis_compilation_data = self.get_paulis_data()
         self.from_initilized_list = from_initilized_list
@@ -223,15 +228,20 @@ class RandomizedBenchmarkProgramBuilder:
             with open("symplectic_compilation_XZ.pkl", 'rb') as f:
                 return pickle.load(f)
 
+    # (LE) if we want to randomize in QUA, we have to implement this in QUA
     def decode_gate_number(self, num):
+        """
+        convert from a representation between 0 to 11520 to the switch case representation.
+        # TODO: verify this code
+        """
         clifford, pauli = divmod(num, 16)
         if clifford < 36:
             q1, q2 = divmod(clifford, 6)
         elif 36 <= clifford < 36 + 324:
             q1, q2 = divmod(clifford, 6)
-        elif 36+324 <= clifford < 36 + 324*2:
+        elif 36 + 324 <= clifford < 36 + 324 * 2:
             q1, q2 = divmod(clifford, 6)
-        elif 36 + 324*2 <= clifford < 720:
+        elif 36 + 324 * 2 <= clifford < 720:
             q1, q2 = divmod(clifford, 6)
 
         q1_pauli, q2_pauli = divmod(pauli, 4)
@@ -240,36 +250,31 @@ class RandomizedBenchmarkProgramBuilder:
         q2_case = q2 * q2_pauli
         return q1_case, q2_case
 
-
     def build_qua_program(self):
         py_pauli_values_list = self.py_setup_matrices_and_pulses("pauli")
         py_clifford_values_list = self.py_setup_matrices_and_pulses("clifford")
         m = 3
+
         with program() as rb_program:
             I_0 = declare(fixed)
             I_1 = declare(fixed)
             Q_0 = declare(fixed)
             Q_1 = declare(fixed)
-            then_helpers = [self.QuaThenHelpers() for i in range(m)]
-            inv_helpers = [self.QuaInverseHelpers() for _ in range(m)]
+
             _rand = [Random(0) for _ in range(m)]
-            random_tracker = [declare(int, value=[self._CLASS_C1_SIZE + 5, 10 + self._NUM_CLIFFORDS] * 20 + [0] * (736-20)) for _ in range(m)] # This will play a sequence of CNOTs
-
-
-            random_tracker = [declare(int, value=[7, 25,120, 26,
-                                                 ]),
+            # the length of this list is m
+            random_tracker = [declare(int, value=[7, 25, 120, 26,
+                                                  ]),
                               declare(int, value=[2, 27, 117, 28,
                                                   ]),
                               declare(int, value=[0, 29, 114, 30,
 
                                                   ])]
-                              # self._CLASS_CNOT_SIZE + self._CLASS_C1_SIZE +
-                              #                     self._CLASS_SWAP_SIZE, 10 + self._NUM_CLIFFORDS] * 20 + [0] * (736-20)) for _ in range(m)] # This will play a sequence of CNOTs
+            # variables related to computation
+            ###############
 
-
-            experiment_ind = [declare(int, value=0) for _ in range(m)]
-            experiment_length = [declare(int, value=0) for _ in range(m)]
-
+            then_helpers = [self.QuaThenHelpers() for i in range(m)]
+            inv_helpers = [self.QuaInverseHelpers() for _ in range(m)]
             current_clifford_ind = [declare(int, value=0) for _ in range(m)]
             number_of_gates = [declare(int, value=0) for _ in range(m)]
             current_g = [declare(int, value=0) for _ in range(m)]
@@ -288,29 +293,46 @@ class RandomizedBenchmarkProgramBuilder:
             inverse_g_ind = [declare(int, value=0) for _ in range(m)]
             inverse_alpha_ind = [declare(int, value=0) for _ in range(m)]
 
+            # variables related to execution
+            ##########################
+            experiment_ind = [declare(int, value=0) for _ in range(m)]
+            # (LE) number of Cliffords we play between prep and measure
+            experiment_length = [declare(int, value=0) for _ in range(m)]
 
-            # align(*list(self.config_builder.config["elements"].keys()))
             elements = [["qubit0_xy"], ["qubit1_xy"], ["qubit0_z", "qubit1_z", "coupler"]]
+            m = len(elements)  # (LE) how many "distinct" element we have -
+            # each one of these will be independent in terms of the compiler and will be an indepedent process
+            # and there is no communication or align, it's like a separate process). Each process receives its own
+            # elements and all processes receive the same input. Each process will act on his elements according to
+            # the input independently of the others.
 
-            for elem_num, elem in enumerate(elements):
+            for elem_num, elem in enumerate(
+                    elements):  # (LE) we are going to do a separate for + switch case for each one
                 with for_(experiment_ind[elem_num], cond=(experiment_ind[elem_num] < self.num_experiments),
-                              update=(experiment_ind[elem_num]+1)):
+                          update=(experiment_ind[elem_num] + 1)):
                     # run the experiment several times
+
+                    # (LE) in this version we randomize the experiment length
                     assign(experiment_length[elem_num],
-                           _rand[elem_num].rand_int(self.max_sequence_length - self.min_seq_length) + self.min_seq_length)
+                           _rand[elem_num].rand_int(
+                               self.max_sequence_length - self.min_seq_length) + self.min_seq_length)
                     assign(number_of_gates[elem_num], (experiment_length[elem_num] + 1))
 
+                    # (LE) this is the calculation part, which can be done optionally inside the OPX
                     if not self.from_initilized_list:
                         with for_(current_clifford_ind[elem_num], init=0,
                                   cond=(current_clifford_ind[elem_num] < experiment_length[elem_num]),
                                   update=(current_clifford_ind[elem_num] + 2)):
                             assign(N[elem_num], _rand[elem_num].rand_int(self._NUM_CLIFFORDS * self._NUM_PAULIS))
-                            assign(random_tracker[elem_num][current_clifford_ind[elem_num]], N[elem_num] / self._NUM_PAULIS)
+                            assign(random_tracker[elem_num][current_clifford_ind[elem_num]],
+                                   N[elem_num] / self._NUM_PAULIS)
                             assign(random_tracker[elem_num][current_clifford_ind[elem_num] + 1],
-                                   (N[elem_num] & (self._NUM_PAULIS -1)) + self._NUM_CLIFFORDS)
+                                   (N[elem_num] & (self._NUM_PAULIS - 1)) + self._NUM_CLIFFORDS)
                             # assign(N[elem_num], random_tracker[current_clifford_ind] * random_tracker[current_clifford_ind + 1])
-                            assign(current_g[elem_num], clifford_mat_values_list[elem_num][N[elem_num] / self._NUM_PAULIS])
-                            assign(current_alpha[elem_num], pauli_mat_values_list[elem_num][N[elem_num] & (self._NUM_PAULIS-1)])
+                            assign(current_g[elem_num],
+                                   clifford_mat_values_list[elem_num][N[elem_num] / self._NUM_PAULIS])
+                            assign(current_alpha[elem_num],
+                                   pauli_mat_values_list[elem_num][N[elem_num] & (self._NUM_PAULIS - 1)])
                             # Compute the g and alpha
                             qua_simple_tableau.then(current_g[elem_num], current_alpha[elem_num],
                                                     prev_g[elem_num], prev_alpha[elem_num],
@@ -327,7 +349,7 @@ class RandomizedBenchmarkProgramBuilder:
                         self.qua_insert_clifford_2_alpha_index(prev_alpha[elem_num], pauli_mat_values_list[elem_num],
                                                                inverse_alpha_ind[elem_num])
                         assign(random_tracker[elem_num][current_clifford_ind[elem_num]],
-                               (inverse_g_ind[elem_num]*inverse_alpha_ind[elem_num]) / self._NUM_PAULIS)
+                               (inverse_g_ind[elem_num] * inverse_alpha_ind[elem_num]) / self._NUM_PAULIS)
                         assign(random_tracker[elem_num][current_clifford_ind[elem_num] + 1],
                                (inverse_alpha_ind[elem_num] & (self._NUM_PAULIS - 1)) + self._NUM_CLIFFORDS)
 
@@ -335,7 +357,7 @@ class RandomizedBenchmarkProgramBuilder:
                     # ================================================================================================ #
                     # ================================================================================================ #
 
-                    print(self._NUM_CLIFFORDS)
+                    print(self._NUM_CLIFFORDS)  # (LE) this is 192 for 2 qubit RB, where we don't square for every qubit
                     with for_(current_clifford_ind[elem_num],
                               0,
                               current_clifford_ind[elem_num] < number_of_gates[elem_num],
@@ -359,7 +381,6 @@ class RandomizedBenchmarkProgramBuilder:
                     #          *[self.resolve_elem(i, "xy", pulser) for i in range(2)])
         return rb_program
 
-
     def _resolve_case(self, i, *elements):
         if i < self._CLASS_C1_SIZE:
             # 6 * 4
@@ -380,7 +401,7 @@ class RandomizedBenchmarkProgramBuilder:
             assert 0
         return
 
-
+    # helper functions related to execution
     def _insert_case_single_qubit_gates(self, c1, pauli, *element):
         ''' single qubit gate will be played in pulser 0. '''
         for elem in element:
@@ -402,12 +423,12 @@ class RandomizedBenchmarkProgramBuilder:
             play(f"swap_c1_{c1}_p_{pauli}", elem)
             frame_rotation_2pi(0, elem)
 
-
+    # helper functions related to computation
     def qua_insert_clifford_2_g_index(self, c, clifford_vals_list, ind_res):
-        Utils.qua_add_binary_search_block(c,clifford_vals_list , self._NUM_CLIFFORDS, ind_res)
+        Utils.qua_add_binary_search_block(c, clifford_vals_list, self._NUM_CLIFFORDS, ind_res)
 
     def qua_insert_clifford_2_alpha_index(self, c, paulis_vals_list, ind_res):
-        Utils.qua_add_binary_search_block(c,paulis_vals_list , self._NUM_PAULIS, ind_res)
+        Utils.qua_add_binary_search_block(c, paulis_vals_list, self._NUM_PAULIS, ind_res)
 
     def py_setup_matrices_and_pulses(self, source_type) -> List:
         source_dict_mat_to_pulse = []
@@ -439,9 +460,10 @@ class Test:
             time.sleep(0.5)
             print(".", end="")
 
-        qubit_graphs = 2 * (1 if self.config_builder.combine_pulsers_of_qubits else self.config_builder.pulsers_per_qubit)
+        qubit_graphs = 2 * (
+            1 if self.config_builder.combine_pulsers_of_qubits else self.config_builder.pulsers_per_qubit)
         num_of_graphs = qubit_graphs + 3
-        i_to_ports = {i: [f"{i*2 +1}", f"{i*2+2}"] for i in range(qubit_graphs)}
+        i_to_ports = {i: [f"{i * 2 + 1}", f"{i * 2 + 2}"] for i in range(qubit_graphs)}
         i_to_ports.update({i + (qubit_graphs): [f"{i + qubit_graphs * 2 + 1}"] for i in range(3)})
         if qubit_graphs == 2:
             i_to_title = {0: "qubit0_xy", 1: "qubit1_xy", 2: "qubit0_z", 3: "qubit1_z", 4: "coupler"}
@@ -456,9 +478,10 @@ class Test:
             min_lim = min(min_lim, non_zero[0].min())
             max_lim = max(max_lim, non_zero[0].max())
         for i in range(num_of_graphs):
-            p = pplot.subplot(num_of_graphs,1,i+1)
-            pplot.title(i_to_title[i], x=-0.03, y=0.9, fontdict={'horizontalalignment': 'right', 'fontsize':10, 'verticalalignment': 'top'})
-            pplot.xlim([min_lim - min_lim*0.05, max_lim + max_lim * 0.15])
+            p = pplot.subplot(num_of_graphs, 1, i + 1)
+            pplot.title(i_to_title[i], x=-0.03, y=0.9,
+                        fontdict={'horizontalalignment': 'right', 'fontsize': 10, 'verticalalignment': 'top'})
+            pplot.xlim([min_lim - min_lim * 0.05, max_lim + max_lim * 0.15])
             pplot.ylim([-0.75, 0.75])
             pplot.xticks(fontsize=6, y=0.05)
             pplot.yticks(fontsize=6, x=0)
@@ -467,7 +490,7 @@ class Test:
             p.yaxis.set_tick_params(length=1)
             job_sim.get_simulated_samples().con1.plot(i_to_ports[i])
             if i < qubit_graphs:
-                pplot.legend([f"analog_{i*2+1}", f"analog_{i*2+2}"], loc='upper right')
+                pplot.legend([f"analog_{i * 2 + 1}", f"analog_{i * 2 + 2}"], loc='upper right')
             else:
                 pplot.legend([f"analog_{i - qubit_graphs + qubit_graphs * 2 + 1}"], loc='upper right')
 
@@ -486,33 +509,32 @@ class Test:
         return final_res
 
     def simulate_bs(self, target_list, target_list_size, val_to_search):
-        ind = (target_list_size-1)//2
-        right = target_list_size-1
+        ind = (target_list_size - 1) // 2
+        right = target_list_size - 1
         left = 0
         result_ind = -1
-        while(left <= right):
+        while (left <= right):
             if (val_to_search < target_list[ind]):
-                right = ind -1
-            elif( val_to_search > target_list[ind]):
+                right = ind - 1
+            elif (val_to_search > target_list[ind]):
                 left = ind + 1
             else:
                 result_ind = ind
-                right=left-1
-            ind = int((right + left) /2)
+                right = left - 1
+            ind = int((right + left) / 2)
 
         return result_ind
 
     def test_binary_search(self):
-        max_int = 2**15
+        max_int = 2 ** 15
         list_size = 100
         value_list = sorted(random.sample(range(max_int), k=list_size))
 
         for i in range(10):
-            target_val = value_list[random.randint(0, list_size-1)]
+            target_val = value_list[random.randint(0, list_size - 1)]
             # target_val = value_list[i]
             print(f"simulator ref = {self.simulate_bs(value_list, list_size, target_val)}")
             with program() as p:
-
                 qua_list = declare(int, value=value_list)
                 qua_target_val = declare(int, value=target_val)
                 qua_res_ind = declare(int, value=0)
@@ -556,12 +578,13 @@ class Test:
             frame_rotation_2pi(-0.25, "qubit0_xy_p0")
             play("c1_0", "qubit0_xy_p0")
 
-
         print(self.run_simulation(p, []))
         return
 
 
-def run_experiment(num_qubits, num_experiments=1, min_sequence_length=1, max_sequence_length=None, from_initilized_list=False):
+# (LE) this is the entry function
+def run_experiment(num_qubits, num_experiments=1, min_sequence_length=1, max_sequence_length=None,
+                   from_initilized_list=False):
     config_builder = conf_3.ConfigBuilder(pulsers_per_qubit=1)
     config_builder.build()
     rb = RandomizedBenchmarkProgramBuilder(config_builder, num_experiments=num_experiments, num_qubits=num_qubits,
@@ -570,8 +593,9 @@ def run_experiment(num_qubits, num_experiments=1, min_sequence_length=1, max_seq
                                            from_initilized_list=from_initilized_list)
     p = rb.build_qua_program()
     tester = Test(config_builder)
-    d = tester.run_simulation(p, ["start_calc", "end_calc" , "end_all_calc","case0","case1","case2", "case3", "case4"])
-    for k,v in d.items():
+    d = tester.run_simulation(p,
+                              ["start_calc", "end_calc", "end_all_calc", "case0", "case1", "case2", "case3", "case4"])
+    for k, v in d.items():
         print(f"{k:<20}, {[i for i in v]}")
 
 
@@ -581,7 +605,7 @@ if __name__ == '__main__':
     # tester = Test(config_builder)
     # tester.test_general()
     # Test()
-    run_experiment(2,1, 3,4, from_initilized_list=True)
+    run_experiment(2, 1, 3, 4, from_initilized_list=True)
     # run_experiment(2,1, 2,3)
 
     # rb.py_setup_gates_unique_ids()
