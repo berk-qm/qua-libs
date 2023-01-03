@@ -11,8 +11,8 @@ from qm.simulate.credentials import create_credentials
 from typing import List
 import time
 
-# host = '172.16.2.103'
-# port = 81
+# host = 'xxx.xxx.xxx.xxx'
+# port = 80
 
 class Quantum_Orchestration_Server:
     def __init__(self):
@@ -30,8 +30,6 @@ class Quantum_Orchestration_Server:
         self.simulation_config = SimulationConfig()
         self.contruct_native_routers()
 
-    ### This part can be signafacantly improved with input/output response models
-    ### This is an MVP so I will implement just the basics
     def contruct_native_routers(self):
         self.router.add_api_route("/create_qmm", self.create_qmm, methods=["GET"],
                                   description="Create Quantum Machine Manager", tags=["Native Function"])
@@ -220,13 +218,6 @@ qos = Quantum_Orchestration_Server()
 class ODMR:
     @qos.parameter("params")
     class Parameters(BaseModel):
-        # start_frequency: Optional[int] = Field(default=None, gt=-400e6, st=400e6,
-        #                                        title="Starting frequency of ODMR experiment")
-        # stop_frequency: Optional[int] = Field(default=None, gt=-400e6, st=400e6,
-        #                                       title="Stopping frequency of ODMR experiment")
-        # step_frequency: Optional[int] = Field(default=None, gt=0e6, st=400e6,
-        #                                       title="Stepping frequency of ODMR experiment")
-        # n_avg: Optional[int] = Field(default=None, gt=0, title="Number of times to repeat the ODMR experiment")
         start_frequency: Optional[int] = Field(default=-250e6, gt=-400e6, st=400e6,
                                                title="Starting frequency of ODMR experiment")
         stop_frequency: Optional[int] = Field(default=250e6, gt=-400e6, st=400e6,
@@ -234,10 +225,6 @@ class ODMR:
         step_frequency: Optional[int] = Field(default=10e6, gt=0e6, st=400e6,
                                               title="Stepping frequency of ODMR experiment")
         n_avg: Optional[int] = Field(default=10000, gt=0, title="Number of times to repeat the ODMR experiment")
-        # # start_frequency: Optional[int] = int(-250e6)
-        # stop_frequency: Optional[int] = int(250e6)
-        # step_frequency: Optional[int] = int(10e6)
-        # n_avg: Optional[int] = int(1e6)
 
     def __init__(self, configuration):
         self.config = configuration
